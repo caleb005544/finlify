@@ -1,0 +1,55 @@
+{
+  "policy_id": "balanced_v1",
+  "policy_version": "v1.0",
+  "strategy_name": "Balanced Baseline",
+  "description": "Balanced strategy with equal weighting across all factors. Suitable for general-purpose recommendations.",
+  "factors": {
+    "sector_match": { "weight": 0.25 },
+    "risk_match": { "weight": 0.25 },
+    "horizon_match": { "weight": 0.25 },
+    "fundamentals": { "weight": 0.25 }
+  },
+  "thresholds": {
+    "strong_buy": 0.80,
+    "buy": 0.60,
+    "hold": 0.40,
+    "sell": 0.20
+  },
+  "rating_labels": {
+    "5": "Strong Buy",
+    "4": "Buy",
+    "3": "Hold",
+    "2": "Sell",
+    "1": "Strong Sell"
+  },
+  "action_mapping": {
+    "strong_buy": "STRONG_BUY",
+    "buy": "BUY",
+    "hold": "HOLD",
+    "sell": "SELL",
+    "strong_sell": "STRONG_SELL"
+  },
+  "assumption_modifiers": {
+    "risk_low_penalty_threshold": 15,
+    "risk_medium_penalty_threshold": 25,
+    "risk_high_penalty_threshold": 40
+  },
+  "reason_templates": {
+    "sector_match": {
+      "match": "Sector '{sector}' aligns with your preference.",
+      "mismatch": "Sector '{sector}' is neutral regarding your preference."
+    },
+    "risk_match": {
+      "match": "Risk profile matches asset class.",
+      "mismatch": "Ticker volatility exceeds your {risk} risk tolerance."
+    },
+    "horizon_match": {
+      "match": "Long-term horizon favorable for accumulated growth.",
+      "mismatch": "Short-term volatility may impact returns."
+    },
+    "fundamentals": {
+      "good": "Fundamental indicators are strong.",
+      "neutral": "Fundamentals are average."
+    }
+  }
+}

@@ -1,0 +1,63 @@
+{
+    "policy_id": "growth_hightech_v1",
+    "policy_version": "v1.0",
+    "strategy_name": "High Growth Tech",
+    "description": "Aggressive growth strategy with heavy emphasis on technology sector and momentum. Higher risk tolerance.",
+    "factors": {
+        "sector_match": {
+            "weight": 0.40
+        },
+        "risk_match": {
+            "weight": 0.10
+        },
+        "horizon_match": {
+            "weight": 0.20
+        },
+        "fundamentals": {
+            "weight": 0.30
+        }
+    },
+    "thresholds": {
+        "strong_buy": 0.75,
+        "buy": 0.55,
+        "hold": 0.35,
+        "sell": 0.20
+    },
+    "rating_labels": {
+        "5": "Strong Buy",
+        "4": "Buy",
+        "3": "Hold",
+        "2": "Sell",
+        "1": "Strong Sell"
+    },
+    "action_mapping": {
+        "strong_buy": "STRONG_BUY",
+        "buy": "BUY",
+        "hold": "HOLD",
+        "sell": "SELL",
+        "strong_sell": "STRONG_SELL"
+    },
+    "assumption_modifiers": {
+        "risk_low_penalty_threshold": 25,
+        "risk_medium_penalty_threshold": 40,
+        "risk_high_penalty_threshold": 60
+    },
+    "reason_templates": {
+        "sector_match": {
+            "match": "Strong tech sector alignment drives growth potential.",
+            "mismatch": "Non-tech sector reduces growth momentum."
+        },
+        "risk_match": {
+            "match": "Volatility acceptable for growth-oriented strategy.",
+            "mismatch": "Extreme volatility may exceed even high-risk tolerance."
+        },
+        "horizon_match": {
+            "match": "Long-term compounding maximizes tech growth.",
+            "mismatch": "Short-term focus limits growth capture."
+        },
+        "fundamentals": {
+            "good": "Strong fundamentals support aggressive valuation.",
+            "neutral": "Fundamentals adequate for speculative growth."
+        }
+    }
+}

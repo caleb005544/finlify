@@ -1,0 +1,63 @@
+{
+    "policy_id": "conservative_v1",
+    "policy_version": "v1.0",
+    "strategy_name": "Conservative Stability",
+    "description": "Risk-averse strategy prioritizing capital preservation and stable fundamentals. Lower volatility tolerance.",
+    "factors": {
+        "sector_match": {
+            "weight": 0.15
+        },
+        "risk_match": {
+            "weight": 0.40
+        },
+        "horizon_match": {
+            "weight": 0.15
+        },
+        "fundamentals": {
+            "weight": 0.30
+        }
+    },
+    "thresholds": {
+        "strong_buy": 0.85,
+        "buy": 0.70,
+        "hold": 0.50,
+        "sell": 0.30
+    },
+    "rating_labels": {
+        "5": "Strong Buy",
+        "4": "Buy",
+        "3": "Hold",
+        "2": "Sell",
+        "1": "Strong Sell"
+    },
+    "action_mapping": {
+        "strong_buy": "STRONG_BUY",
+        "buy": "BUY",
+        "hold": "HOLD",
+        "sell": "SELL",
+        "strong_sell": "STRONG_SELL"
+    },
+    "assumption_modifiers": {
+        "risk_low_penalty_threshold": 10,
+        "risk_medium_penalty_threshold": 18,
+        "risk_high_penalty_threshold": 28
+    },
+    "reason_templates": {
+        "sector_match": {
+            "match": "Sector preference met with stable characteristics.",
+            "mismatch": "Sector neutrality acceptable for diversification."
+        },
+        "risk_match": {
+            "match": "Low volatility aligns with conservative risk profile.",
+            "mismatch": "Volatility exceeds conservative risk tolerance."
+        },
+        "horizon_match": {
+            "match": "Long-term stability supports capital preservation.",
+            "mismatch": "Short-term uncertainty increases risk."
+        },
+        "fundamentals": {
+            "good": "Strong fundamentals ensure stability and safety.",
+            "neutral": "Fundamentals require closer monitoring for safety."
+        }
+    }
+}
