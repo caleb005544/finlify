@@ -1,6 +1,6 @@
 """Tests for POST /forecast contract correctness."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi.testclient import TestClient
 from app.main import app
 
@@ -54,11 +54,12 @@ class TestForecastContract:
 
     def test_model_used_is_dummy(self):
         data = client.post("/forecast", json=DAILY_PAYLOAD).json()
-        assert data["model_used"] == "dummy_v0"
+        assert data["model_used"] in {"dummy_v0", "sarima_v0", "prophet_v0", "xgboost_v0"}
 
     def test_routing_reason(self):
         data = client.post("/forecast", json=DAILY_PAYLOAD).json()
-        assert data["routing_reason"] == "v3.0_dummy"
+        assert isinstance(data["routing_reason"], str)
+        assert len(data["routing_reason"]) > 0
 
     def test_forecast_length_equals_horizon(self):
         data = client.post("/forecast", json=DAILY_PAYLOAD).json()
@@ -89,6 +90,7 @@ class TestForecastContract:
         assert "trace" in data
         assert "cache_hit" in data["trace"]
         assert "runtime_ms" in data["trace"]
+        assert "quota_remaining" in data["trace"]
 
     def test_metrics_present(self):
         data = client.post("/forecast", json=DAILY_PAYLOAD).json()
@@ -146,6 +148,12 @@ class TestDeterminism:
         fc1 = [(p["ds"], p["yhat"]) for p in resp1["forecast"]]
         fc2 = [(p["ds"], p["yhat"]) for p in resp2["forecast"]]
         assert fc1 == fc2
+
+    def test_second_call_hits_cache(self):
+        resp1 = client.post("/forecast", json=DAILY_PAYLOAD).json()
+        resp2 = client.post("/forecast", json=DAILY_PAYLOAD).json()
+        assert resp1["trace"]["cache_hit"] is False
+        assert resp2["trace"]["cache_hit"] is True
 
 
 class TestDummyBaseline:
@@ -230,3 +238,35 @@ class TestEdgeCases:
         resp = client.post("/forecast", json=payload)
         assert resp.status_code == 200
         assert len(resp.json()["forecast"]) == 5
+
+    def test_model_hint_prophet_routes(self):
+        payload = {
+            "series_id": "hint_prophet",
+            "freq": "D",
+            "horizon": 5,
+            "model_hint": "prophet",
+            "y": [{"ds": "2025-06-01", "y": 99.9}],
+        }
+        resp = client.post("/forecast", json=payload)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["model_used"] == "prophet_v0"
+        assert "prophet_backend" in data["metrics"]
+
+    def test_model_hint_xgboost_routes(self):
+        start = datetime(2025, 6, 1)
+        payload = {
+            "series_id": "hint_xgboost",
+            "freq": "D",
+            "horizon": 5,
+            "model_hint": "xgboost",
+            "y": [
+                {"ds": (start + timedelta(days=i)).strftime("%Y-%m-%d"), "y": 90.0 + i}
+                for i in range(40)
+            ],
+        }
+        resp = client.post("/forecast", json=payload)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["model_used"] == "xgboost_v0"
+        assert "xgboost_backend" in data["metrics"]

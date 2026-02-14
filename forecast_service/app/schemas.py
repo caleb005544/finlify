@@ -33,7 +33,7 @@ class ForecastRequest(BaseModel):
     )
     model_hint: Optional[str] = Field(
         default="auto",
-        description="Model preference hint (accepted but ignored in V3.0)",
+        description="Model preference hint: auto|dummy|sarima|prophet|xgboost",
     )
     policy_id: Optional[str] = Field(
         default=None,
@@ -48,6 +48,17 @@ class ForecastRequest(BaseModel):
             raise ValueError(f"freq must be one of {allowed}, got '{v}'")
         return v.upper()
 
+    @field_validator("model_hint")
+    @classmethod
+    def validate_model_hint(cls, v):
+        if v is None:
+            return "auto"
+        hint = v.lower().strip()
+        allowed = {"auto", "dummy", "sarima", "prophet", "xgboost"}
+        if hint not in allowed:
+            raise ValueError(f"model_hint must be one of {allowed}, got '{v}'")
+        return hint
+
 
 class ForecastPoint(BaseModel):
     """A single forecast point."""
@@ -61,6 +72,7 @@ class ForecastTrace(BaseModel):
     """Execution trace metadata."""
     cache_hit: bool = False
     runtime_ms: int = 0
+    quota_remaining: int = 0
 
 
 class ForecastResponse(BaseModel):

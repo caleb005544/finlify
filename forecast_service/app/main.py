@@ -1,5 +1,8 @@
-"""Finlify Forecast Service — V3.0 (dummy skeleton)."""
+"""Finlify Forecast Service — V3.0."""
 
+import time
+import uuid
+from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
@@ -8,9 +11,24 @@ from .schemas import (
     ForecastRequest,
     ForecastResponse,
     ModelInfo,
+    ForecastTrace,
 )
-from .forecast import generate_dummy_forecast
-from .settings import SERVICE_NAME, SERVICE_VERSION
+from .forecast import route_model, generate_forecast_for_model
+from .runtime import (
+    ForecastCache,
+    SeriesQuotaLimiter,
+    SQLiteUsageLogger,
+    UsageEvent,
+    build_cache_key,
+)
+from .settings import (
+    SERVICE_NAME,
+    SERVICE_VERSION,
+    CACHE_TTL_SECONDS,
+    SERIES_DAILY_QUOTA,
+    USAGE_LOG_MAX_ITEMS,
+    USAGE_LOG_DB_PATH,
+)
 
 app = FastAPI(
     title=SERVICE_NAME,
@@ -24,6 +42,13 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+forecast_cache = ForecastCache(ttl_seconds=CACHE_TTL_SECONDS)
+quota_limiter = SeriesQuotaLimiter(daily_limit=SERIES_DAILY_QUOTA)
+usage_logger = SQLiteUsageLogger(
+    db_path=USAGE_LOG_DB_PATH,
+    max_items=USAGE_LOG_MAX_ITEMS,
 )
 
 
@@ -43,10 +68,24 @@ def list_models():
     return [
         ModelInfo(
             model_id="dummy_v0",
-            description="Flat baseline dummy model (V3.0 skeleton). "
-                        "Returns last observed value as forecast.",
+            description="Flat baseline model. Returns last observed value.",
             status="active",
-        )
+        ),
+        ModelInfo(
+            model_id="sarima_v0",
+            description="SARIMA baseline via statsmodels with safe fallback.",
+            status="active",
+        ),
+        ModelInfo(
+            model_id="prophet_v0",
+            description="Prophet baseline with safe seasonal fallback.",
+            status="active",
+        ),
+        ModelInfo(
+            model_id="xgboost_v0",
+            description="Gradient-boosted autoregressive baseline with safe fallback.",
+            status="active",
+        ),
     ]
 
 
@@ -62,4 +101,126 @@ def create_forecast(request: ForecastRequest):
             },
         )
 
-    return generate_dummy_forecast(request)
+    allowed, quota_remaining = quota_limiter.allow(request.series_id)
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": "QUOTA_EXCEEDED",
+                "message": (
+                    f"Daily forecast quota exceeded for series_id '{request.series_id}'."
+                ),
+            },
+        )
+
+    started_ms = time.monotonic_ns() // 1_000_000
+    cache_key = build_cache_key(request)
+    cached = forecast_cache.get(cache_key)
+    if cached is not None:
+        elapsed_ms = int(time.monotonic_ns() // 1_000_000 - started_ms)
+        response = cached.model_copy(deep=True)
+        response.request_id = str(uuid.uuid4())
+        response.trace = ForecastTrace(
+            cache_hit=True,
+            runtime_ms=elapsed_ms,
+            quota_remaining=quota_remaining,
+        )
+        usage_logger.append(
+            UsageEvent(
+                ts=datetime.now(timezone.utc).isoformat(),
+                series_id=request.series_id,
+                model_used=response.model_used,
+                cache_hit=True,
+                runtime_ms=elapsed_ms,
+            )
+        )
+        return response
+
+    model_used, routing_reason = route_model(request)
+    points, metrics = generate_forecast_for_model(request, model_used)
+    elapsed_ms = int(time.monotonic_ns() // 1_000_000 - started_ms)
+
+    response = ForecastResponse(
+        request_id=str(uuid.uuid4()),
+        model_used=model_used,
+        routing_reason=routing_reason,
+        forecast=points,
+        metrics=metrics,
+        trace=ForecastTrace(
+            cache_hit=False,
+            runtime_ms=elapsed_ms,
+            quota_remaining=quota_remaining,
+        ),
+    )
+    forecast_cache.set(cache_key, response)
+    usage_logger.append(
+        UsageEvent(
+            ts=datetime.now(timezone.utc).isoformat(),
+            series_id=request.series_id,
+            model_used=response.model_used,
+            cache_hit=False,
+            runtime_ms=elapsed_ms,
+        )
+    )
+    return response
+
+
+@app.get("/usage")
+def usage(limit: int = 50):
+    """Recent forecast calls for debugging/observability in local/dev."""
+    safe_limit = max(1, min(limit, 500))
+    return {"items": usage_logger.recent(limit=safe_limit)}
+
+
+@app.get("/runtime/status")
+def runtime_status():
+    """Runtime status for cache, quota, and usage subsystems."""
+    return {
+        "cache": forecast_cache.stats(),
+        "quota": quota_limiter.stats(limit=10),
+        "usage": {
+            "stored_events": usage_logger.count(),
+            "max_items": USAGE_LOG_MAX_ITEMS,
+            "db_path": USAGE_LOG_DB_PATH,
+        },
+    }
+
+
+@app.get("/runtime/summary")
+def runtime_summary():
+    """Aggregate usage metrics for observability."""
+    return {
+        "usage": usage_logger.summary(),
+        "quota": {
+            "daily_limit": quota_limiter.daily_limit,
+        },
+        "cache": {
+            "entries": forecast_cache.stats()["entries"],
+            "ttl_seconds": forecast_cache.ttl_seconds,
+        },
+    }
+
+
+@app.post("/runtime/clear")
+def runtime_clear(cache: bool = True, quota: bool = True, usage: bool = True):
+    """Clear selected runtime state containers."""
+    cleared = {
+        "cache": 0,
+        "quota": 0,
+        "usage": 0,
+    }
+
+    if cache:
+        before = forecast_cache.stats()["entries"]
+        forecast_cache.clear()
+        cleared["cache"] = before
+
+    if quota:
+        before = quota_limiter.stats(limit=1000)["active_series"]
+        quota_limiter.clear()
+        cleared["quota"] = before
+
+    if usage:
+        cleared["usage"] = usage_logger.clear()
+
+    return {"cleared": cleared}
