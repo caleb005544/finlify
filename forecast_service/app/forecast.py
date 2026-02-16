@@ -4,8 +4,13 @@ This module intentionally keeps models lightweight/deterministic so the service
 stays runnable in local/dev environments while we phase in real ML models.
 """
 
+import hashlib
+import json
+import time
 from datetime import datetime, timedelta
+from functools import lru_cache
 from statistics import mean
+from threading import Lock
 from typing import Any, Dict, List, Optional, Tuple
 
 from .schemas import (
@@ -21,7 +26,73 @@ from .settings import (
     ROUTING_SARIMA_MIN_OBS,
     ROUTING_XGBOOST_MAX_HORIZON,
     ROUTING_XGBOOST_MIN_OBS,
+    XGBOOST_MODEL_CACHE_TTL_SECONDS,
 )
+
+
+@lru_cache(maxsize=1)
+def _load_sarimax():
+    from statsmodels.tsa.statespace.sarimax import SARIMAX
+    return SARIMAX
+
+
+@lru_cache(maxsize=1)
+def _load_prophet_stack():
+    import pandas as pd
+    from prophet import Prophet
+    return pd, Prophet
+
+
+@lru_cache(maxsize=1)
+def _load_xgboost_stack():
+    import numpy as np
+    from xgboost import XGBRegressor
+    return np, XGBRegressor
+
+
+_xgboost_model_cache: Dict[str, Tuple[float, Any, int, float]] = {}
+_xgboost_cache_lock = Lock()
+
+
+def _xgboost_model_cache_key(
+    request: ForecastRequest,
+    ys: List[float],
+    lag_count: int,
+) -> str:
+    payload = {
+        "series_id": request.series_id,
+        "freq": request.freq,
+        "lag_count": lag_count,
+        "y": ys,
+    }
+    encoded = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _xgboost_get_cached_model(
+    key: str,
+) -> Optional[Tuple[Any, int, float]]:
+    now = time.time()
+    with _xgboost_cache_lock:
+        entry = _xgboost_model_cache.get(key)
+        if not entry:
+            return None
+        expires_at, model, lag_count, sigma = entry
+        if now > expires_at:
+            _xgboost_model_cache.pop(key, None)
+            return None
+        return model, lag_count, sigma
+
+
+def _xgboost_set_cached_model(
+    key: str,
+    model: Any,
+    lag_count: int,
+    sigma: float,
+) -> None:
+    expires_at = time.time() + XGBOOST_MODEL_CACHE_TTL_SECONDS
+    with _xgboost_cache_lock:
+        _xgboost_model_cache[key] = (expires_at, model, lag_count, sigma)
 
 
 def _increment_date(ds: str, freq: str, step: int) -> str:
@@ -118,7 +189,7 @@ def _sarima_forecast(
     seasonal_order = (P, D, Q, seasonal_period)
 
     try:
-        from statsmodels.tsa.statespace.sarimax import SARIMAX
+        SARIMAX = _load_sarimax()
 
         model = SARIMAX(
             ys,
@@ -221,8 +292,7 @@ def _prophet_forecast(
     request: ForecastRequest,
 ) -> Tuple[List[ForecastPoint], Dict[str, Any]]:
     try:
-        import pandas as pd
-        from prophet import Prophet
+        pd, Prophet = _load_prophet_stack()
     except Exception as exc:
         return _seasonal_forecast(request), {
             "prophet_backend": "fallback_seasonal_proxy",
@@ -293,8 +363,7 @@ def _xgboost_forecast(
         }
 
     try:
-        import numpy as np
-        from xgboost import XGBRegressor
+        np, XGBRegressor = _load_xgboost_stack()
     except Exception as exc:
         points = _trend_forecast(request)
         return points, {
@@ -304,25 +373,40 @@ def _xgboost_forecast(
         }
 
     try:
-        X, y = [], []
-        for i in range(lag_count, len(ys)):
-            X.append(ys[i - lag_count: i])
-            y.append(ys[i])
+        cache_key = _xgboost_model_cache_key(request, ys, lag_count)
+        cached = _xgboost_get_cached_model(cache_key)
 
-        x_arr = np.array(X, dtype=float)
-        y_arr = np.array(y, dtype=float)
+        model_cache_hit = False
+        train_rows = 0
+        if cached:
+            model, lag_count, sigma = cached
+            model_cache_hit = True
+        else:
+            X, y = [], []
+            for i in range(lag_count, len(ys)):
+                X.append(ys[i - lag_count: i])
+                y.append(ys[i])
 
-        model = XGBRegressor(
-            n_estimators=200,
-            max_depth=4,
-            learning_rate=0.05,
-            subsample=0.9,
-            colsample_bytree=0.9,
-            objective="reg:squarederror",
-            random_state=42,
-            n_jobs=1,
-        )
-        model.fit(x_arr, y_arr)
+            x_arr = np.array(X, dtype=float)
+            y_arr = np.array(y, dtype=float)
+            train_rows = int(x_arr.shape[0])
+
+            model = XGBRegressor(
+                n_estimators=200,
+                max_depth=4,
+                learning_rate=0.05,
+                subsample=0.9,
+                colsample_bytree=0.9,
+                objective="reg:squarederror",
+                random_state=42,
+                n_jobs=1,
+            )
+            model.fit(x_arr, y_arr)
+
+            residuals = y_arr - model.predict(x_arr)
+            sigma = float(np.std(residuals)) if residuals.size else 1.0
+            sigma = max(sigma, 1.0)
+            _xgboost_set_cached_model(cache_key, model, lag_count, sigma)
 
         history = ys[-lag_count:]
         preds: List[float] = []
@@ -331,10 +415,6 @@ def _xgboost_forecast(
             yhat = float(model.predict(features)[0])
             preds.append(yhat)
             history.append(yhat)
-
-        residuals = y_arr - model.predict(x_arr)
-        sigma = float(np.std(residuals)) if residuals.size else 1.0
-        sigma = max(sigma, 1.0)
 
         points: List[ForecastPoint] = []
         for i in range(1, request.horizon + 1):
@@ -353,7 +433,8 @@ def _xgboost_forecast(
         return points, {
             "xgboost_backend": "xgboost",
             "lag_count": lag_count,
-            "train_rows": int(x_arr.shape[0]),
+            "train_rows": train_rows,
+            "model_cache_hit": model_cache_hit,
         }
     except Exception as exc:
         points = _trend_forecast(request)
@@ -437,3 +518,12 @@ def generate_forecast_for_model(
     }
     metrics.update(model_metrics)
     return points, metrics
+
+
+def reset_model_caches() -> None:
+    """Reset import/model caches for deterministic tests."""
+    _load_sarimax.cache_clear()
+    _load_prophet_stack.cache_clear()
+    _load_xgboost_stack.cache_clear()
+    with _xgboost_cache_lock:
+        _xgboost_model_cache.clear()

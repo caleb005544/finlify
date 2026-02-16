@@ -10,6 +10,30 @@ Finlify is an auditable, configurable investment decisioning platform. It uses J
 
 ---
 
+## ✨ Latest Updates
+
+### Public Demo & Ticker Dashboard
+- Added public routes:
+  - `/demo`
+  - `/about`
+- Added an interactive ticker dashboard at `/ticker/[ticker]` with:
+  - History range controls (`3y`, `1y/12m`, `6m`, `3m`, `1m`, `1w`, `3d`, `1d`) plus `+ / -`
+  - Forecast show/hide toggle and forecast range controls (`1m`, `3m`, `6m`) plus `+ / -`
+  - Combined chart overlay (history + forecast)
+  - Quote KPI cards: Market Cap, P/E Ratio, EPS, Trade Volume
+  - Forecast summary table (ticker/company/date/close/period/forecast/recommendation/why)
+
+### Backend Quote/History Enhancements
+- `/api/quotes` now returns:
+  - `market_cap`, `pe_ratio`, `eps`, `volume`, `date`
+- `/api/history` supports expanded ranges:
+  - `1d`, `3d`, `1w`, `1m`, `3m`, `6m`, `12m`, `1y`, `3y`, `all`
+
+### UI Theme Refresh
+- Updated to a beige + blue visual system for the public dashboard.
+
+---
+
 ## 🚀 Quick Start
 
 ### 1. Prerequisites
@@ -53,6 +77,10 @@ docker compose up --build
 - **Scoring Service (Backend)**: [http://localhost:8000](http://localhost:8000)
 - **Forecast Service**: [http://localhost:8001](http://localhost:8001)
 
+Demo entry points:
+- [http://localhost:3000/demo](http://localhost:3000/demo)
+- [http://localhost:3000/ticker/AAPL](http://localhost:3000/ticker/AAPL)
+
 ### 4. Select a Scoring Strategy
 Toggle strategies via the `FINLIFY_POLICY_ID` environment variable:
 ```bash
@@ -82,6 +110,39 @@ docker compose exec backend python3 -m pytest tests/ -q
 
 # Forecast
 docker compose exec forecast python3 -m pytest tests/ -q
+```
+
+---
+
+## 🛠 Troubleshooting
+
+### 1) `Cannot connect to the Docker daemon`
+Docker Desktop is not running (or still starting).  
+Fix:
+```bash
+open -a Docker
+docker info
+```
+
+### 2) `docker compose ps -a` is empty
+Usually means build failed before containers were created.  
+Run again and inspect the first failing service:
+```bash
+docker compose up --build
+```
+
+### 3) Frontend build fails during `next build`
+Most often TypeScript compile errors in frontend files.  
+Check:
+```bash
+docker compose build frontend --no-cache
+```
+
+### 4) Backend `/api/history` returns 500
+If you see `TypeError: 'str' object is not callable`, make sure backend changes are up to date and rebuild:
+```bash
+docker compose down
+docker compose up --build
 ```
 
 ---

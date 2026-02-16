@@ -5,7 +5,10 @@ export default function Home() {
     return (
         <div className="flex flex-col items-center">
             {/* Hero Section */}
-            <section className="w-full py-24 md:py-32 lg:py-40 flex flex-col items-center justify-center bg-radial-gradient from-accent/20 to-background text-center px-4">
+            <section
+                id="demo"
+                className="w-full py-24 md:py-32 lg:py-40 flex flex-col items-center justify-center bg-radial-gradient from-accent/20 to-background text-center px-4"
+            >
                 <div className="space-y-6 max-w-3xl mx-auto">
                     <div className="inline-flex items-center rounded-full border border-border bg-background px-3 py-1 text-sm text-muted-foreground shadow-sm mb-4">
                         <span className="flex h-2 w-2 rounded-full bg-primary mr-2 animate-pulse"></span>

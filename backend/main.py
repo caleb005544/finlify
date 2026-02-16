@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
@@ -52,6 +52,32 @@ class StrategyItem(BaseModel):
     description: str
     factors: dict  # simplified weights: {dimension: weight}
     thresholds: dict
+
+
+class PolicyVersionItem(BaseModel):
+    policy_id: str
+    policy_version: str
+    strategy_name: str
+    description: str
+    active: bool
+
+
+class PolicyVersionStateResponse(BaseModel):
+    active_policy_id: str
+    updated_at: str
+    history: list
+    versions: List[PolicyVersionItem]
+
+
+class PolicyActivateRequest(BaseModel):
+    policy_id: str
+    actor: str = "system"
+    reason: Optional[str] = None
+
+
+class PolicyRollbackRequest(BaseModel):
+    actor: str = "system"
+    reason: Optional[str] = None
 
 
 class ForecastRequest(BaseModel):
@@ -108,6 +134,51 @@ def list_strategies():
         for p in policies
     ]
 
+
+@app.get("/policy/versions", response_model=PolicyVersionStateResponse)
+def get_policy_versions():
+    try:
+        return PolicyLoader.get_policy_version_state()
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/policy/activate", response_model=PolicyVersionStateResponse)
+def activate_policy_version(request: PolicyActivateRequest):
+    try:
+        return PolicyLoader.activate_policy_version(
+            policy_id=request.policy_id,
+            actor=request.actor,
+            reason=request.reason,
+        )
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "UNKNOWN_POLICY_ID",
+                "message": f"policy_id '{request.policy_id}' not found.",
+            },
+        )
+
+
+@app.post("/policy/rollback", response_model=PolicyVersionStateResponse)
+def rollback_policy_version(request: PolicyRollbackRequest):
+    try:
+        return PolicyLoader.rollback_policy_version(
+            actor=request.actor,
+            reason=request.reason,
+        )
+    except ValueError as e:
+        if str(e) == "NO_PREVIOUS_VERSION":
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "NO_PREVIOUS_VERSION",
+                    "message": "No policy version history available to rollback.",
+                },
+            )
+        raise
+
 @app.post("/forecast")
 def get_forecast(request: ForecastRequest):
     # Mock forecast data
@@ -140,20 +211,41 @@ def get_quote(ticker: str):
     seed = sum(ord(c) for c in ticker)
     price = (seed % 500) + 50
     change = (seed % 20) - 10
-    
+    market_cap = (seed % 2500 + 50) * 1_000_000_000
+    pe_ratio = ((seed % 320) / 10.0) + 5.0
+    eps = ((seed % 120) / 10.0) + 0.5
+    volume = (seed % 40 + 1) * 1_000_000
+
     return {
         "ticker": ticker.upper(),
         "name": f"{ticker.upper()} Inc.",
         "price": round(price, 2),
         "change": round(change, 2),
-        "change_percent": round((change / price) * 100, 2)
+        "change_percent": round((change / price) * 100, 2),
+        "market_cap": int(market_cap),
+        "pe_ratio": round(pe_ratio, 2),
+        "eps": round(eps, 2),
+        "volume": int(volume),
+        "date": datetime.now().strftime("%Y-%m-%d"),
     }
 
 @app.get("/api/history")
-def get_history(ticker: str, range: str = "1m"):
+def get_history(ticker: str, time_range: str = Query("1m", alias="range")):
     # Proxy / Mock
-    days_map = {"1m": 30, "3m": 90, "6m": 180, "1y": 365, "all": 1000}
-    days = days_map.get(range.lower(), 30)
+    days_map = {
+        "1d": 1,
+        "3d": 3,
+        "1w": 7,
+        "1m": 30,
+        "3m": 90,
+        "6m": 180,
+        "12m": 365,
+        "1y": 365,
+        "3y": 1095,
+        "all": 1000,
+    }
+    normalized = time_range.lower()
+    days = days_map.get(normalized, 30)
     
     data = []
     base_price = 150.0
@@ -162,7 +254,7 @@ def get_history(ticker: str, range: str = "1m"):
     end_date = datetime.now()
     start_date = end_date - timedelta(days=days)
     
-    for i in range(days):
+    for i in range(max(days, 2)):
         date = (start_date + timedelta(days=i)).strftime("%Y-%m-%d")
         change = (random.random() - 0.5) * 5
         current += change

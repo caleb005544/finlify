@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from app.main import app, quota_limiter
+from app.main import app, tier_manager
 from app.runtime import SQLiteUsageLogger, UsageEvent
 
 client = TestClient(app)
@@ -16,16 +16,17 @@ def _payload(series_id: str) -> dict:
 
 
 def test_quota_exceeded_returns_429():
-    previous = quota_limiter.daily_limit
-    quota_limiter.daily_limit = 1
+    previous = tier_manager._tiers["demo"]["daily_quota"]
+    tier_manager._tiers["demo"]["daily_quota"] = 1
     try:
-        first = client.post("/forecast", json=_payload("quota-series"))
-        second = client.post("/forecast", json=_payload("quota-series"))
+        headers = {"X-Finlify-Tier": "demo", "X-Client-Id": "quota-client"}
+        first = client.post("/forecast", json=_payload("quota-series"), headers=headers)
+        second = client.post("/forecast", json=_payload("quota-series"), headers=headers)
         assert first.status_code == 200
         assert second.status_code == 429
         assert second.json()["detail"]["error"] == "QUOTA_EXCEEDED"
     finally:
-        quota_limiter.daily_limit = previous
+        tier_manager._tiers["demo"]["daily_quota"] = previous
 
 
 def test_usage_endpoint_returns_items():
@@ -58,6 +59,8 @@ def test_runtime_status_summary_and_clear_endpoints():
     summary_data = summary.json()
     assert "usage" in summary_data
     assert summary_data["usage"]["total_calls"] >= 1
+    assert "p95_runtime_ms" in summary_data["usage"]
+    assert "p99_runtime_ms" in summary_data["usage"]
 
     clear = client.post("/runtime/clear")
     assert clear.status_code == 200
