@@ -65,7 +65,21 @@ FORECAST_ROUTING_PROPHET_MIN_HORIZON=21
 FORECAST_ROUTING_SARIMA_MIN_OBS=24
 FORECAST_ROUTING_XGBOOST_MIN_OBS=90
 FORECAST_ROUTING_XGBOOST_MAX_HORIZON=14
+
+# Closed demo hardening
+BACKEND_CORS_ORIGINS=https://demo.your-domain.com
+FORECAST_CORS_ORIGINS=https://demo.your-domain.com
+FORECAST_USAGE_LOG_DB_PATH=/data/finlify_forecast_usage.sqlite3
+DEMO_BASIC_AUTH_ENABLED=true
+DEMO_BASIC_AUTH_USERNAME=demo_user
+DEMO_BASIC_AUTH_PASSWORD=change_me
 ```
+
+### 2.5 Closed Demo Mode (small invited group)
+- Turn on HTTP Basic Auth gate by setting `DEMO_BASIC_AUTH_ENABLED=true`.
+- Set `DEMO_BASIC_AUTH_USERNAME` and `DEMO_BASIC_AUTH_PASSWORD`.
+- Restrict API origins with `BACKEND_CORS_ORIGINS` and `FORECAST_CORS_ORIGINS` to your demo domain.
+- Persist forecast usage logs by keeping `FORECAST_USAGE_LOG_DB_PATH=/data/finlify_forecast_usage.sqlite3` (docker volume-backed).
 
 ### 3. Run with Docker
 Start all services (Backend, Forecast, Frontend) with one command:

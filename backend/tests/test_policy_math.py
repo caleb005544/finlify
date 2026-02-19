@@ -8,17 +8,11 @@ Validates mathematical properties of policy files:
 - No negative weights
 """
 import json
-import pytest
 
 
 class TestPolicyMath:
     """Mathematical invariant tests for policy files."""
-    
-    @pytest.mark.parametrize("policy_file", [
-        pytest.param(p, id=p.stem) for p in (
-            pytest.importorskip("conftest").POLICY_DIR.glob("*.json")
-        )
-    ])
+
     def test_weights_sum_to_one(self, policy_file, required_dimensions):
         """Test that factor weights sum to 1.0 within tolerance."""
         with open(policy_file) as f:
@@ -32,11 +26,6 @@ class TestPolicyMath:
             f"Weights sum to {weight_sum:.6f}, expected 1.0 (±{tolerance})"
         )
     
-    @pytest.mark.parametrize("policy_file", [
-        pytest.param(p, id=p.stem) for p in (
-            pytest.importorskip("conftest").POLICY_DIR.glob("*.json")
-        )
-    ])
     def test_weights_are_positive(self, policy_file, required_dimensions):
         """Test that all weights are non-negative."""
         with open(policy_file) as f:
@@ -46,11 +35,6 @@ class TestPolicyMath:
             weight = data["factors"][dim]["weight"]
             assert weight >= 0, f"Weight for '{dim}' is negative: {weight}"
     
-    @pytest.mark.parametrize("policy_file", [
-        pytest.param(p, id=p.stem) for p in (
-            pytest.importorskip("conftest").POLICY_DIR.glob("*.json")
-        )
-    ])
     def test_weights_in_valid_range(self, policy_file, required_dimensions):
         """Test that all weights are between 0 and 1."""
         with open(policy_file) as f:
@@ -62,11 +46,6 @@ class TestPolicyMath:
                 f"Weight for '{dim}' out of range [0,1]: {weight}"
             )
     
-    @pytest.mark.parametrize("policy_file", [
-        pytest.param(p, id=p.stem) for p in (
-            pytest.importorskip("conftest").POLICY_DIR.glob("*.json")
-        )
-    ])
     def test_thresholds_monotonically_decreasing(self, policy_file):
         """Test that thresholds are strictly monotonically decreasing."""
         with open(policy_file) as f:
@@ -84,11 +63,6 @@ class TestPolicyMath:
             f"hold ({t['hold']}) must be > sell ({t['sell']})"
         )
     
-    @pytest.mark.parametrize("policy_file", [
-        pytest.param(p, id=p.stem) for p in (
-            pytest.importorskip("conftest").POLICY_DIR.glob("*.json")
-        )
-    ])
     def test_thresholds_in_valid_range(self, policy_file):
         """Test that all thresholds are within [0, 1]."""
         with open(policy_file) as f:
@@ -101,11 +75,6 @@ class TestPolicyMath:
                 f"Threshold '{name}' out of range [0,1]: {value}"
             )
     
-    @pytest.mark.parametrize("policy_file", [
-        pytest.param(p, id=p.stem) for p in (
-            pytest.importorskip("conftest").POLICY_DIR.glob("*.json")
-        )
-    ])
     def test_weights_are_numeric(self, policy_file, required_dimensions):
         """Test that all weights are numeric (int or float)."""
         with open(policy_file) as f:
@@ -117,11 +86,6 @@ class TestPolicyMath:
                 f"Weight for '{dim}' is not numeric: {type(weight).__name__}"
             )
     
-    @pytest.mark.parametrize("policy_file", [
-        pytest.param(p, id=p.stem) for p in (
-            pytest.importorskip("conftest").POLICY_DIR.glob("*.json")
-        )
-    ])
     def test_thresholds_are_numeric(self, policy_file):
         """Test that all thresholds are numeric (int or float)."""
         with open(policy_file) as f:

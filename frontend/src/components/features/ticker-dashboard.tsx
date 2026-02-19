@@ -86,9 +86,18 @@ export function TickerDashboard({
   const [historyLoading, setHistoryLoading] = useState(false)
   const [forecastLoading, setForecastLoading] = useState(false)
 
+  const updateHistoryRange = (next: HistoryRange) => {
+    setHistoryLoading(true)
+    setHistoryRange(next)
+  }
+
+  const updateForecastPeriod = (next: ForecastPeriod) => {
+    setForecastLoading(true)
+    setForecastPeriod(next)
+  }
+
   useEffect(() => {
     let cancelled = false
-    setHistoryLoading(true)
     fetchStockHistory(ticker, historyRange)
       .then((rows) => {
         if (!cancelled) setHistory(rows)
@@ -107,7 +116,6 @@ export function TickerDashboard({
 
   useEffect(() => {
     let cancelled = false
-    setForecastLoading(true)
     fetchForecast(ticker, FORECAST_DAYS[forecastPeriod])
       .then((rows) => {
         if (!cancelled) setForecast(rows)
@@ -174,7 +182,7 @@ export function TickerDashboard({
               variant="outline"
               size="icon"
               className="rounded-full"
-              onClick={() => historyIdx > 0 && setHistoryRange(HISTORY_RANGES[historyIdx - 1])}
+              onClick={() => historyIdx > 0 && updateHistoryRange(HISTORY_RANGES[historyIdx - 1])}
               disabled={historyIdx <= 0}
             >
               <Minus className="h-4 w-4" />
@@ -185,7 +193,7 @@ export function TickerDashboard({
                 variant={item === historyRange ? 'default' : 'outline'}
                 size="sm"
                 className="rounded-full"
-                onClick={() => setHistoryRange(item)}
+                onClick={() => updateHistoryRange(item)}
               >
                 {item}
               </Button>
@@ -194,7 +202,7 @@ export function TickerDashboard({
               variant="outline"
               size="icon"
               className="rounded-full"
-              onClick={() => historyIdx < HISTORY_RANGES.length - 1 && setHistoryRange(HISTORY_RANGES[historyIdx + 1])}
+              onClick={() => historyIdx < HISTORY_RANGES.length - 1 && updateHistoryRange(HISTORY_RANGES[historyIdx + 1])}
               disabled={historyIdx >= HISTORY_RANGES.length - 1}
             >
               <Plus className="h-4 w-4" />
@@ -216,7 +224,7 @@ export function TickerDashboard({
               variant="outline"
               size="icon"
               className="rounded-full"
-              onClick={() => forecastIdx > 0 && setForecastPeriod(FORECAST_PERIODS[forecastIdx - 1])}
+              onClick={() => forecastIdx > 0 && updateForecastPeriod(FORECAST_PERIODS[forecastIdx - 1])}
               disabled={forecastIdx <= 0}
             >
               <Minus className="h-4 w-4" />
@@ -227,7 +235,7 @@ export function TickerDashboard({
                 variant={item === forecastPeriod ? 'default' : 'outline'}
                 size="sm"
                 className="rounded-full"
-                onClick={() => setForecastPeriod(item)}
+                onClick={() => updateForecastPeriod(item)}
               >
                 {item}
               </Button>
@@ -236,7 +244,7 @@ export function TickerDashboard({
               variant="outline"
               size="icon"
               className="rounded-full"
-              onClick={() => forecastIdx < FORECAST_PERIODS.length - 1 && setForecastPeriod(FORECAST_PERIODS[forecastIdx + 1])}
+              onClick={() => forecastIdx < FORECAST_PERIODS.length - 1 && updateForecastPeriod(FORECAST_PERIODS[forecastIdx + 1])}
               disabled={forecastIdx >= FORECAST_PERIODS.length - 1}
             >
               <Plus className="h-4 w-4" />

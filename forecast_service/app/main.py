@@ -2,6 +2,7 @@
 
 import time
 import uuid
+import os
 from datetime import datetime, timezone
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -39,10 +40,17 @@ app = FastAPI(
     description="Time-series forecast service for Finlify (V3.0 dummy skeleton)",
 )
 
+def _parse_cors_origins() -> list[str]:
+    raw = os.getenv("FORECAST_CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
+    origins = [item.strip() for item in raw.split(",") if item.strip()]
+    return origins or ["http://localhost:3000"]
+
+_cors_origins = _parse_cors_origins()
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials="*" not in _cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )

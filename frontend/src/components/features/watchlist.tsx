@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Plus, X, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import Link from 'next/link'
-import { getWatchlist, addToWatchlist, removeFromWatchlist, WatchlistItem } from '@/lib/api/watchlist'
+import { getWatchlist, removeFromWatchlist, WatchlistItem } from '@/lib/api/watchlist'
 import { fetchStockQuote } from '@/lib/api/backend'
 
 interface EnrichedWatchlistItem extends WatchlistItem {
@@ -17,7 +17,6 @@ interface EnrichedWatchlistItem extends WatchlistItem {
 export function Watchlist() {
     const [items, setItems] = useState<EnrichedWatchlistItem[]>([])
     const [loading, setLoading] = useState(true)
-    const [addingTicker, setAddingTicker] = useState('')
 
     useEffect(() => {
         loadWatchlist()
@@ -33,7 +32,7 @@ export function Watchlist() {
                 try {
                     const quote = await fetchStockQuote(item.ticker)
                     return { ...item, ...quote }
-                } catch (e) {
+                } catch {
                     return { ...item, price: 0, change: 0, name: 'Unknown' }
                 }
             }))

@@ -30,6 +30,26 @@ export interface ForecastPoint {
     confidenceHigh: number
 }
 
+interface ApiHistoryPoint {
+    date?: string
+    value?: number | string
+}
+
+interface ApiForecastPoint {
+    date?: string
+    value?: number | string
+    confidenceLow?: number | string
+    confidenceHigh?: number | string
+    confidence_low?: number | string
+    confidence_high?: number | string
+}
+
+interface ScoreProfile {
+    risk_level?: string
+    horizon?: string
+    sector_preference?: string
+}
+
 export async function fetchStockQuote(ticker: string) {
     const res = await fetch(`${resolveApiUrl()}/api/quotes?ticker=${ticker}`);
     if (!res.ok) throw new Error('Failed to fetch quote');
@@ -51,13 +71,13 @@ export async function fetchStockHistory(ticker: string, range: string = '1y') {
     if (!res.ok) throw new Error('Failed to fetch history');
     const raw = await res.json();
     if (!Array.isArray(raw)) return [];
-    return raw.map((point: any) => ({
-        date: point.date,
+    return raw.map((point: ApiHistoryPoint) => ({
+        date: point.date ?? '',
         value: Number(point.value ?? 0),
     })) as HistoryPoint[];
 }
 
-export async function fetchScore(ticker: string, profile: any) {
+export async function fetchScore(ticker: string, profile: ScoreProfile) {
     const res = await fetch(`${resolveApiUrl()}/score`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -76,8 +96,8 @@ export async function fetchForecast(ticker: string, days: number = 30) {
     if (!res.ok) throw new Error('Failed to fetch forecast');
     const raw = await res.json();
     if (!Array.isArray(raw)) return [];
-    return raw.map((point: any) => ({
-        date: point.date,
+    return raw.map((point: ApiForecastPoint) => ({
+        date: point.date ?? '',
         value: Number(point.value ?? 0),
         confidenceLow: Number(point.confidenceLow ?? point.confidence_low ?? point.value ?? 0),
         confidenceHigh: Number(point.confidenceHigh ?? point.confidence_high ?? point.value ?? 0),

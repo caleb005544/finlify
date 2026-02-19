@@ -8,7 +8,6 @@ Validates that all policy JSON files conform to the required schema:
 - Action mapping contains required codes
 """
 import json
-import pytest
 from policy import PolicyLoader
 
 
@@ -19,11 +18,6 @@ class TestPolicySchema:
         """Verify at least one policy file exists."""
         assert len(all_policy_files) > 0, "No policy files found in docs/policies/"
     
-    @pytest.mark.parametrize("policy_file", [
-        pytest.param(p, id=p.stem) for p in (
-            pytest.importorskip("conftest").POLICY_DIR.glob("*.json")
-        )
-    ])
     def test_required_top_level_fields(self, policy_file):
         """Test that all required top-level fields exist."""
         with open(policy_file) as f:
@@ -45,11 +39,6 @@ class TestPolicySchema:
         for field in required_fields:
             assert field in data, f"Missing required field: {field}"
     
-    @pytest.mark.parametrize("policy_file", [
-        pytest.param(p, id=p.stem) for p in (
-            pytest.importorskip("conftest").POLICY_DIR.glob("*.json")
-        )
-    ])
     def test_factor_dimensions_exact_match(self, policy_file, required_dimensions):
         """Test that factor dimensions match exactly (no missing, no extra)."""
         with open(policy_file) as f:
@@ -65,11 +54,6 @@ class TestPolicySchema:
         assert not extra, f"Unexpected dimensions: {extra}"
         assert factor_keys == required_dims, "Factor dimensions must match exactly"
     
-    @pytest.mark.parametrize("policy_file", [
-        pytest.param(p, id=p.stem) for p in (
-            pytest.importorskip("conftest").POLICY_DIR.glob("*.json")
-        )
-    ])
     def test_reason_templates_coverage(self, policy_file, required_dimensions):
         """Test that reason_templates exist for all dimensions."""
         with open(policy_file) as f:
@@ -85,11 +69,6 @@ class TestPolicySchema:
                 assert "match" in templates[dim], f"Missing 'match' template for {dim}"
                 assert "mismatch" in templates[dim], f"Missing 'mismatch' template for {dim}"
     
-    @pytest.mark.parametrize("policy_file", [
-        pytest.param(p, id=p.stem) for p in (
-            pytest.importorskip("conftest").POLICY_DIR.glob("*.json")
-        )
-    ])
     def test_action_mapping_complete(self, policy_file):
         """Test that action_mapping contains all required action codes."""
         with open(policy_file) as f:
@@ -101,11 +80,6 @@ class TestPolicySchema:
         for action in required_actions:
             assert action in action_mapping, f"Missing action_mapping for: {action}"
     
-    @pytest.mark.parametrize("policy_file", [
-        pytest.param(p, id=p.stem) for p in (
-            pytest.importorskip("conftest").POLICY_DIR.glob("*.json")
-        )
-    ])
     def test_policy_id_matches_filename(self, policy_file):
         """Test that policy_id matches filename prefix."""
         with open(policy_file) as f:
@@ -118,11 +92,6 @@ class TestPolicySchema:
             f"Policy ID '{actual_id}' does not match filename '{expected_id}'"
         )
     
-    @pytest.mark.parametrize("policy_file", [
-        pytest.param(p, id=p.stem) for p in (
-            pytest.importorskip("conftest").POLICY_DIR.glob("*.json")
-        )
-    ])
     def test_thresholds_exist(self, policy_file):
         """Test that all required threshold keys exist."""
         with open(policy_file) as f:

@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button'
 import { getProfile, saveProfile, AssumptionProfileData } from '@/lib/api/profiles'
 import { Loader2 } from 'lucide-react'
 
+const RISK_OPTIONS: AssumptionProfileData['risk_level'][] = ['Low', 'Medium', 'High']
+const HORIZON_OPTIONS: AssumptionProfileData['horizon'][] = ['Short', 'Medium', 'Long']
+
 export function AssumptionProfile() {
     const [risk, setRisk] = useState<AssumptionProfileData['risk_level']>('Medium')
     const [horizon, setHorizon] = useState<AssumptionProfileData['horizon']>('Long')
@@ -74,12 +77,12 @@ export function AssumptionProfile() {
                 <div className="space-y-2">
                     <label className="text-sm font-medium">Risk Tolerance</label>
                     <div className="grid grid-cols-3 gap-2">
-                        {['Low', 'Medium', 'High'].map((r) => (
+                        {RISK_OPTIONS.map((r) => (
                             <Button
                                 key={r}
                                 variant={risk === r ? 'default' : 'outline'}
                                 size="sm"
-                                onClick={() => setRisk(r as any)}
+                                onClick={() => setRisk(r)}
                                 className="text-xs"
                             >
                                 {r}
@@ -91,12 +94,12 @@ export function AssumptionProfile() {
                 <div className="space-y-2">
                     <label className="text-sm font-medium">Time Horizon</label>
                     <div className="grid grid-cols-3 gap-2">
-                        {['Short', 'Medium', 'Long'].map((h) => (
+                        {HORIZON_OPTIONS.map((h) => (
                             <Button
                                 key={h}
                                 variant={horizon === h ? 'default' : 'outline'}
                                 size="sm"
-                                onClick={() => setHorizon(h as any)}
+                                onClick={() => setHorizon(h)}
                                 className="text-xs"
                             >
                                 {h}

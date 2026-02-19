@@ -12,6 +12,8 @@ services:
       - SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
       - SUPABASE_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
       - FINLIFY_POLICY_ID=${FINLIFY_POLICY_ID:-balanced_v1}
+      - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS:-http://localhost:3000}
+    restart: unless-stopped
 
   frontend:
     build:
@@ -24,6 +26,10 @@ services:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
       - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
       - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      - DEMO_BASIC_AUTH_ENABLED=${DEMO_BASIC_AUTH_ENABLED:-false}
+      - DEMO_BASIC_AUTH_USERNAME=${DEMO_BASIC_AUTH_USERNAME:-}
+      - DEMO_BASIC_AUTH_PASSWORD=${DEMO_BASIC_AUTH_PASSWORD:-}
+    restart: unless-stopped
 
   forecast:
     build:
@@ -31,3 +37,12 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8001:8001"
+    environment:
+      - FORECAST_CORS_ORIGINS=${FORECAST_CORS_ORIGINS:-http://localhost:3000}
+      - FORECAST_USAGE_LOG_DB_PATH=${FORECAST_USAGE_LOG_DB_PATH:-/data/finlify_forecast_usage.sqlite3}
+    volumes:
+      - forecast_data:/data
+    restart: unless-stopped
+
+volumes:
+  forecast_data:

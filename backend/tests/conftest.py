@@ -25,6 +25,14 @@ def all_policy_files(policy_dir):
     """Return list of all policy JSON files."""
     return list(policy_dir.glob("*.json"))
 
+@pytest.fixture(
+    params=sorted(POLICY_DIR.glob("*.json")),
+    ids=lambda p: p.stem,
+)
+def policy_file(request):
+    """Parametrized policy file fixture for schema/math test suites."""
+    return request.param
+
 @pytest.fixture
 def balanced_policy():
     """Load balanced_v1 policy for testing."""

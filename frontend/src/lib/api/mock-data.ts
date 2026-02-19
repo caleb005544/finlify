@@ -68,15 +68,15 @@ export function getMockStockData(ticker: string): StockData {
     }
 
     // Determine recommendation
-    let action: 'BUY' | 'SELL' | 'HOLD' = 'HOLD'
+    let action: 'BUY' | 'SELL' | 'HOLD' | 'STRONG_BUY' | 'STRONG_SELL' = 'HOLD'
     let rating = 3
 
-    if (forecastPrice > lastPrice * 1.05) {
+    if (forecastPrice > lastPrice * 1.15) {
+        action = 'STRONG_BUY'
+        rating = 5
+    } else if (forecastPrice > lastPrice * 1.05) {
         action = 'BUY'
         rating = 4
-    } else if (forecastPrice > lastPrice * 1.15) {
-        action = 'STRONG_BUY' as any
-        rating = 5
     } else if (forecastPrice < lastPrice * 0.95) {
         action = 'SELL'
         rating = 2
