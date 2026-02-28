@@ -24,16 +24,19 @@ export function StockSearch({ placeholder = 'Search for a stock...' }: { placeho
     const router = useRouter()
     const debouncedQuery = useDebounce(query, 300)
 
-    // Fetch suggestions whenever the debounced query changes
+    // Clear suggestions when query is empty
     useEffect(() => {
-        let cancelled = false
-
         if (!debouncedQuery.trim()) {
             setSuggestions([])
             setOpen(false)
-            return
         }
+    }, [debouncedQuery])
 
+    // Fetch suggestions whenever the debounced query changes
+    useEffect(() => {
+        if (!debouncedQuery.trim()) return
+
+        let cancelled = false
         setLoading(true)
         fetchStockSearch(debouncedQuery)
             .then((results) => {
