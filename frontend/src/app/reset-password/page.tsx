@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { TrendingUp, AlertCircle, CheckCircle } from 'lucide-react'
@@ -12,7 +11,6 @@ export default function ResetPasswordPage() {
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [success, setSuccess] = useState(false)
-    const router = useRouter()
     const supabase = createClient()
 
     const handleResetPassword = async (e: React.FormEvent) => {

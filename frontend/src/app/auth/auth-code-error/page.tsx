@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { TrendingUp, AlertCircle } from 'lucide-react'
+import { AlertCircle } from 'lucide-react'
 
 export default function AuthCodeErrorPage() {
     return (
