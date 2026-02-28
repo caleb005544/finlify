@@ -26,12 +26,14 @@ export function StockSearch({ placeholder = 'Search for a stock...' }: { placeho
 
     // Fetch suggestions whenever the debounced query changes
     useEffect(() => {
+        let cancelled = false
+
         if (!debouncedQuery.trim()) {
             setSuggestions([])
             setOpen(false)
             return
         }
-        let cancelled = false
+
         setLoading(true)
         fetchStockSearch(debouncedQuery)
             .then((results) => {
@@ -46,6 +48,7 @@ export function StockSearch({ placeholder = 'Search for a stock...' }: { placeho
             .finally(() => {
                 if (!cancelled) setLoading(false)
             })
+
         return () => {
             cancelled = true
         }

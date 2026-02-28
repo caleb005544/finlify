@@ -40,7 +40,7 @@ export default function ResetPasswordPage() {
                     <TrendingUp className="h-10 w-10 text-primary" />
                     <h1 className="text-2xl font-bold tracking-tight">Reset password</h1>
                     <p className="text-sm text-muted-foreground">
-                        Enter your email and we'll send you a link to reset your password
+                        Enter your email and we&apos;ll send you a link to reset your password
                     </p>
                 </div>
 
