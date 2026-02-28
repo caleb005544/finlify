@@ -12,6 +12,7 @@ services:
       - SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
       - SUPABASE_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
       - FINLIFY_POLICY_ID=${FINLIFY_POLICY_ID:-balanced_v1}
+      - FINNHUB_API_KEY=${FINNHUB_API_KEY:-}
       - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS:-http://localhost:3000}
     restart: unless-stopped
 

@@ -103,3 +103,17 @@ export async function fetchForecast(ticker: string, days: number = 30) {
         confidenceHigh: Number(point.confidenceHigh ?? point.confidence_high ?? point.value ?? 0),
     })) as ForecastPoint[];
 }
+
+export interface StockSearchResult {
+    ticker: string
+    name: string
+}
+
+export async function fetchStockSearch(query: string): Promise<StockSearchResult[]> {
+    if (!query.trim()) return [];
+    const res = await fetch(`${resolveApiUrl()}/api/search?q=${encodeURIComponent(query)}`);
+    if (!res.ok) return []; // silently degrade on search failure
+    const data = await res.json();
+    if (!Array.isArray(data)) return [];
+    return data as StockSearchResult[];
+}

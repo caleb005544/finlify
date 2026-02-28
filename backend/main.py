@@ -1,9 +1,10 @@
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
-import random
+from typing import Any, List, Optional
 import os
+import time
+import httpx
 from datetime import datetime, timedelta
 
 app = FastAPI(title="Finlify Backend")
@@ -187,59 +188,66 @@ def rollback_policy_version(request: PolicyRollbackRequest):
             )
         raise
 
-@app.post("/forecast")
-def get_forecast(request: ForecastRequest):
-    # Mock forecast data
-    data = []
-    base_price = 150.0
-    # Use ticker hash for stable mock
-    seed = sum(ord(c) for c in request.ticker)
-    
-    for i in range(request.days):
-        date = (datetime.now() + timedelta(days=i+1)).strftime("%Y-%m-%d")
-        
-        # Determine trend based on seed
-        trend = (seed % 10 - 5) / 10.0 # -0.5 to 0.5
-        noise = (i % 5 - 2) / 2.0
-        
-        val = base_price + (i * trend) + noise
-        
-        data.append({
-            "date": date,
-            "value": round(val, 2),
-            "confidence_low": round(val * 0.9, 2),
-            "confidence_high": round(val * 1.1, 2)
-        })
-    return data
+# ---------------------------------------------------------------------------
+# Finnhub market data integration
+# ---------------------------------------------------------------------------
 
-@app.get("/api/quotes")
-def get_quote(ticker: str):
-    # Proxy / Mock
-    # In real app, call Yahoo Finance here
-    seed = sum(ord(c) for c in ticker)
-    price = (seed % 500) + 50
-    change = (seed % 20) - 10
-    market_cap = (seed % 2500 + 50) * 1_000_000_000
-    pe_ratio = ((seed % 320) / 10.0) + 5.0
-    eps = ((seed % 120) / 10.0) + 0.5
-    volume = (seed % 40 + 1) * 1_000_000
+FINNHUB_API_KEY: str = os.getenv("FINNHUB_API_KEY", "")
+FINNHUB_BASE = "https://finnhub.io/api/v1"
+MARKET_CACHE_TTL = int(os.getenv("MARKET_CACHE_TTL_SECONDS", "60"))
 
-    return {
-        "ticker": ticker.upper(),
-        "name": f"{ticker.upper()} Inc.",
-        "price": round(price, 2),
-        "change": round(change, 2),
-        "change_percent": round((change / price) * 100, 2),
-        "market_cap": int(market_cap),
-        "pe_ratio": round(pe_ratio, 2),
-        "eps": round(eps, 2),
-        "volume": int(volume),
-        "date": datetime.now().strftime("%Y-%m-%d"),
-    }
+_market_cache: dict[str, tuple[Any, float]] = {}
 
-@app.get("/api/history")
-def get_history(ticker: str, time_range: str = Query("1m", alias="range")):
-    # Proxy / Mock
+
+def _cache_get(key: str) -> Optional[Any]:
+    entry = _market_cache.get(key)
+    if entry and (time.time() - entry[1]) < MARKET_CACHE_TTL:
+        return entry[0]
+    return None
+
+
+def _cache_set(key: str, value: Any) -> None:
+    _market_cache[key] = (value, time.time())
+
+
+def _finnhub(path: str, params: Optional[dict] = None) -> Any:
+    """Synchronous Finnhub API call with structured error handling."""
+    if not FINNHUB_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "FINNHUB_NOT_CONFIGURED",
+                "message": "FINNHUB_API_KEY environment variable is not set.",
+            },
+        )
+    try:
+        merged = {"token": FINNHUB_API_KEY, **(params or {})}
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.get(f"{FINNHUB_BASE}{path}", params=merged)
+        if resp.status_code == 429:
+            raise HTTPException(
+                status_code=429,
+                detail={"error": "RATE_LIMITED", "message": "Finnhub rate limit reached. Try again shortly."},
+            )
+        if resp.status_code != 200:
+            raise HTTPException(
+                status_code=502,
+                detail={"error": "UPSTREAM_ERROR", "message": f"Finnhub returned HTTP {resp.status_code}"},
+            )
+        return resp.json()
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=504,
+            detail={"error": "UPSTREAM_TIMEOUT", "message": "Finnhub request timed out."},
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail={"error": "UPSTREAM_ERROR", "message": str(exc)})
+
+
+def _range_to_from_ts(range_str: str) -> int:
+    """Convert a range string like '3m' into a unix timestamp for Finnhub /candle from= param."""
     days_map = {
         "1d": 1,
         "3d": 3,
@@ -250,25 +258,134 @@ def get_history(ticker: str, time_range: str = Query("1m", alias="range")):
         "12m": 365,
         "1y": 365,
         "3y": 1095,
-        "all": 1000,
+        "all": 1825,  # 5 years
     }
-    normalized = time_range.lower()
-    days = days_map.get(normalized, 30)
-    
-    data = []
+    days = days_map.get(range_str.lower(), 30)
+    return int((datetime.now() - timedelta(days=days)).timestamp())
+
+
+# ---------------------------------------------------------------------------
+# Legacy mock forecast (backend) – kept for backward compat with frontend
+# The real forecasting runs in forecast_service on port 8001.
+# ---------------------------------------------------------------------------
+
+@app.post("/forecast")
+def get_forecast(request: ForecastRequest):
+    seed = sum(ord(c) for c in request.ticker)
     base_price = 150.0
-    current = base_price
-    
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=days)
-    
-    for i in range(max(days, 2)):
-        date = (start_date + timedelta(days=i)).strftime("%Y-%m-%d")
-        change = (random.random() - 0.5) * 5
-        current += change
+    data = []
+    for i in range(request.days):
+        date = (datetime.now() + timedelta(days=i + 1)).strftime("%Y-%m-%d")
+        trend = (seed % 10 - 5) / 10.0
+        noise = (i % 5 - 2) / 2.0
+        val = base_price + (i * trend) + noise
         data.append({
             "date": date,
-            "value": round(current, 2)
+            "value": round(val, 2),
+            "confidence_low": round(val * 0.9, 2),
+            "confidence_high": round(val * 1.1, 2),
         })
-        
     return data
+
+
+# ---------------------------------------------------------------------------
+# Real market data endpoints (Finnhub-backed)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/quotes")
+def get_quote(ticker: str):
+    key = f"quote:{ticker.upper()}"
+    cached = _cache_get(key)
+    if cached:
+        return cached
+
+    symbol = ticker.upper()
+
+    # --- quote (price / change) ---
+    q = _finnhub("/quote", {"symbol": symbol})
+    price = float(q.get("c") or 0)
+    prev_close = float(q.get("pc") or price)
+    change = round(price - prev_close, 2)
+    change_pct = round((change / prev_close * 100) if prev_close else 0, 2)
+
+    # --- company profile (name, market cap) ---
+    profile = _finnhub("/stock/profile2", {"symbol": symbol})
+    name = profile.get("name") or f"{symbol} Inc."
+    market_cap_millions = float(profile.get("marketCapitalization") or 0)
+    market_cap = int(market_cap_millions * 1_000_000)
+
+    # --- basic financials (P/E, EPS, volume) ---
+    metrics_resp = _finnhub("/stock/metric", {"symbol": symbol, "metric": "all"})
+    m = metrics_resp.get("metric") or {}
+    pe_ratio = round(float(m.get("peNormalizedAnnual") or m.get("pe") or 0), 2)
+    eps = round(float(m.get("epsBasicExclExtraItemsAnnual") or m.get("eps") or 0), 2)
+    volume = int(m.get("10DayAverageTradingVolume") or 0) * 1_000  # reported in thousands
+
+    result = {
+        "ticker": symbol,
+        "name": name,
+        "price": round(price, 2),
+        "change": change,
+        "change_percent": change_pct,
+        "market_cap": market_cap,
+        "pe_ratio": pe_ratio,
+        "eps": eps,
+        "volume": volume,
+        "date": datetime.now().strftime("%Y-%m-%d"),
+    }
+    _cache_set(key, result)
+    return result
+
+
+@app.get("/api/history")
+def get_history(ticker: str, time_range: str = Query("1m", alias="range")):
+    symbol = ticker.upper()
+    normalized = time_range.lower()
+    key = f"history:{symbol}:{normalized}"
+    cached = _cache_get(key)
+    if cached:
+        return cached
+
+    from_ts = _range_to_from_ts(normalized)
+    to_ts = int(datetime.now().timestamp())
+
+    candle = _finnhub("/stock/candle", {
+        "symbol": symbol,
+        "resolution": "D",
+        "from": from_ts,
+        "to": to_ts,
+    })
+
+    if candle.get("s") == "no_data" or not candle.get("t"):
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "NO_DATA", "message": f"No history data for {symbol} in range '{normalized}'."},
+        )
+
+    timestamps = candle["t"]
+    closes = candle["c"]
+    data = [
+        {"date": datetime.fromtimestamp(ts).strftime("%Y-%m-%d"), "value": round(float(close), 2)}
+        for ts, close in zip(timestamps, closes)
+    ]
+    _cache_set(key, data)
+    return data
+
+
+@app.get("/api/search")
+def search_stocks(q: str = Query(..., min_length=1)):
+    """Search for stocks by ticker or company name. Returns [{ticker, name}]."""
+    key = f"search:{q.lower()}"
+    cached = _cache_get(key)
+    if cached:
+        return cached
+
+    raw = _finnhub("/search", {"q": q})
+    results = [
+        {"ticker": item["displaySymbol"], "name": item["description"]}
+        for item in (raw.get("result") or [])
+        if item.get("type") == "Common Stock" and item.get("displaySymbol")
+    ][:8]  # cap at 8 suggestions
+
+    _cache_set(key, results)
+    return results

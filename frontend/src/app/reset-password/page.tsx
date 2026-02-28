@@ -5,48 +5,33 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
-import { TrendingUp, AlertCircle } from 'lucide-react'
+import { TrendingUp, AlertCircle, CheckCircle } from 'lucide-react'
 
-export default function SignUpPage() {
+export default function ResetPasswordPage() {
     const [email, setEmail] = useState('')
-    const [password, setPassword] = useState('')
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [success, setSuccess] = useState(false)
     const router = useRouter()
     const supabase = createClient()
 
-    const handleSignUp = async (e: React.FormEvent) => {
+    const handleResetPassword = async (e: React.FormEvent) => {
         e.preventDefault()
         setLoading(true)
         setError(null)
+        setSuccess(false)
 
-        if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-            // Mock Signup for Demo
-            setTimeout(() => {
-                router.push('/dashboard')
-            }, 1000)
-            return
-        }
-
-        const { error } = await supabase.auth.signUp({
-            email,
-            password,
-            options: {
-                emailRedirectTo: `${location.origin}/auth/callback`,
-            },
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: `${window.location.origin}/reset-password-confirm`,
         })
 
         if (error) {
             setError(error.message)
             setLoading(false)
         } else {
-            // Show confirmation message - user must verify email
-            setError(null)
+            setSuccess(true)
             setEmail('')
-            setPassword('')
-            // Show success message (you might want to create a dedicated success page)
-            alert('✅ 帳號已建立！請檢查您的郵箱以驗證帳號。')
-            router.push('/login')
+            setLoading(false)
         }
     }
 
@@ -55,14 +40,21 @@ export default function SignUpPage() {
             <div className="w-full max-w-sm space-y-6">
                 <div className="flex flex-col items-center space-y-2 text-center">
                     <TrendingUp className="h-10 w-10 text-primary" />
-                    <h1 className="text-2xl font-bold tracking-tight">Create an account</h1>
+                    <h1 className="text-2xl font-bold tracking-tight">Reset password</h1>
                     <p className="text-sm text-muted-foreground">
-                        Enter your email below to create your account
+                        Enter your email and we'll send you a link to reset your password
                     </p>
                 </div>
 
                 <div className="grid gap-6">
-                    <form onSubmit={handleSignUp}>
+                    {success && (
+                        <div className="flex items-center space-x-2 rounded-md bg-green-50 p-4 text-sm text-green-700">
+                            <CheckCircle className="h-4 w-4" />
+                            <span>Check your email for a password reset link</span>
+                        </div>
+                    )}
+
+                    <form onSubmit={handleResetPassword}>
                         <div className="grid gap-4">
                             <div className="grid gap-2">
                                 <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70" htmlFor="email">
@@ -79,19 +71,7 @@ export default function SignUpPage() {
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     disabled={loading}
-                                />
-                            </div>
-                            <div className="grid gap-2">
-                                <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70" htmlFor="password">
-                                    Password
-                                </label>
-                                <input
-                                    id="password"
-                                    type="password"
-                                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    disabled={loading}
+                                    required
                                 />
                             </div>
 
@@ -104,16 +84,16 @@ export default function SignUpPage() {
 
                             <Button disabled={loading}>
                                 {loading ? (
-                                    <span className="animate-pulse">Creating account...</span>
+                                    <span className="animate-pulse">Sending...</span>
                                 ) : (
-                                    "Sign Up"
+                                    "Send reset link"
                                 )}
                             </Button>
                         </div>
                     </form>
 
                     <div className="text-center text-sm text-muted-foreground">
-                        Already have an account?{" "}
+                        Remember your password?{" "}
                         <Link href="/login" className="underline hover:text-primary">
                             Sign in
                         </Link>
