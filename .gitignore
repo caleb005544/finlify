@@ -11,10 +11,10 @@ output/
 *.pkl
 *.joblib
 
-# Keep selected small tracked files only if needed later
-# !data/mart/investment/top_ranked_assets.csv
-# !data/mart/investment/factor_snapshot_latest.csv
-# !data/visualization/investment/latest_ranking_for_pbi.csv
+# Allow deployment data files
+!data/mart/investment/top_ranked_assets.csv
+!data/visualization/investment/latest_ranking_for_pbi.csv
+!data/visualization/investment/price_history_for_pbi.csv
 
 # OS / editor
 .DS_Store
