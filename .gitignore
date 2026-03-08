@@ -1,0 +1,26 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Data
+input/
+output/
+*.parquet
+*.csv
+*.pkl
+*.joblib
+
+# Keep selected small tracked files only if needed later
+# !data/mart/investment/top_ranked_assets.csv
+# !data/mart/investment/factor_snapshot_latest.csv
+# !data/visualization/investment/latest_ranking_for_pbi.csv
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Streamlit / logs
+.streamlit/secrets.toml
+*.log
