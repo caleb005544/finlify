@@ -636,11 +636,21 @@ elif page == "Asset Detail":
                     if not forecast_plot.empty:
                         fig_price.add_vline(
                             x=latest_date,
-                            line_dash="dot",
-                            line_color="#64748b",
                             line_width=1,
-                            annotation_text="Forecast Start",
-                            annotation_position="top left",
+                            line_dash="dot",
+                            line_color="gray",
+                        )
+
+                        fig_price.add_annotation(
+                            x=latest_date,
+                            y=1,
+                            xref="x",
+                            yref="paper",
+                            text="Forecast Start",
+                            showarrow=False,
+                            xanchor="left",
+                            yanchor="bottom",
+                            font=dict(size=10, color="gray"),
                         )
 
                         ci_plot = forecast_plot.dropna(subset=["lower_ci", "upper_ci"]).copy()
