@@ -17,6 +17,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 MART_DIR = BASE_DIR / "data/mart"
 RANKING_FILE = MART_DIR / "investment/top_ranked_assets.csv"
 PRICE_FILE = BASE_DIR / "data/visualization/investment/price_history_for_pbi.csv"
+FORECAST_FILE = BASE_DIR / "data/visualization/investment/asset_forecast_for_streamlit.csv"
 
 DECISION_COLORS = {
     "BUY": "#16a34a",
@@ -49,6 +50,27 @@ def load_prices() -> pd.DataFrame:
 
     if "date" in df.columns:
         df["date"] = pd.to_datetime(df["date"])
+
+    return df
+
+
+@st.cache_data
+def load_forecasts() -> pd.DataFrame:
+    if not FORECAST_FILE.exists():
+        return pd.DataFrame()
+
+    df = pd.read_csv(FORECAST_FILE)
+
+    if "forecast_date" in df.columns:
+        df["forecast_date"] = pd.to_datetime(df["forecast_date"], errors="coerce")
+    if "last_actual_date" in df.columns:
+        df["last_actual_date"] = pd.to_datetime(df["last_actual_date"], errors="coerce")
+    if "horizon" in df.columns:
+        df["horizon"] = pd.to_numeric(df["horizon"], errors="coerce")
+
+    for col in ["forecast_price", "lower_ci", "upper_ci", "forecast_ret_1d", "last_actual_close"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
 
     return df
 
@@ -315,6 +337,7 @@ def render_decision_snapshot(asset: pd.Series, universe_size: int) -> None:
 
 rankings_df = load_rankings()
 prices_df = load_prices()
+forecasts_df = load_forecasts()
 most_recent_data_date = get_most_recent_data_date(rankings_df, prices_df)
 apply_global_ui_style()
 
@@ -467,6 +490,18 @@ elif page == "Asset Detail":
             prices_df["ticker"].astype(str).str.upper() == selected_ticker.upper()
         ].copy()
 
+    forecast_row = pd.DataFrame()
+    if not forecasts_df.empty:
+        selected_source_ticker = str(asset_row.iloc[0].get("source_ticker", "")).upper() if not asset_row.empty else ""
+        if selected_source_ticker and "source_ticker" in forecasts_df.columns:
+            forecast_row = forecasts_df[
+                forecasts_df["source_ticker"].astype(str).str.upper() == selected_source_ticker
+            ].copy()
+        elif "ticker" in forecasts_df.columns:
+            forecast_row = forecasts_df[
+                forecasts_df["ticker"].astype(str).str.upper() == selected_ticker.upper()
+            ].copy()
+
     if asset_row.empty:
         render_empty_state("Ticker not found in ranking data.")
         st.stop()
@@ -492,7 +527,7 @@ elif page == "Asset Detail":
     with st.container():
         st.subheader("Price History")
 
-        filter_col1, filter_col2 = st.columns([1.6, 1.4])
+        filter_col1, filter_col2, filter_col3 = st.columns([1.35, 1.2, 1.45])
 
         with filter_col1:
             horizon = st.radio(
@@ -506,6 +541,19 @@ elif page == "Asset Detail":
                 "Moving Averages",
                 ["MA20", "MA50", "MA200"],
                 default=[],
+            )
+
+        with filter_col3:
+            if hasattr(st, "toggle"):
+                show_forecast = st.toggle("Show Forecast", value=False, key="asset_show_forecast")
+            else:
+                show_forecast = st.checkbox("Show Forecast", value=False, key="asset_show_forecast")
+            forecast_horizon = st.radio(
+                "Forecast Horizon",
+                ["30D", "60D", "90D"],
+                horizontal=True,
+                key="asset_forecast_horizon",
+                disabled=not show_forecast,
             )
 
         if not price_row.empty and {"date", "close"}.issubset(price_row.columns):
@@ -560,6 +608,57 @@ elif page == "Asset Detail":
                     mode="lines",
                     name="MA200",
                 )
+
+            if show_forecast:
+                forecast_available = {"forecast_date", "forecast_price", "horizon"}.issubset(forecast_row.columns)
+                if forecast_available:
+                    horizon_map_forecast = {"30D": 30, "60D": 60, "90D": 90}
+                    horizon_limit = horizon_map_forecast.get(forecast_horizon, 90)
+                    forecast_plot = forecast_row.copy()
+                    forecast_plot = forecast_plot[
+                        forecast_plot["horizon"].notna() & (forecast_plot["horizon"] <= horizon_limit)
+                    ].copy()
+                    forecast_plot = forecast_plot.dropna(subset=["forecast_date", "forecast_price"])
+                    forecast_plot = forecast_plot.sort_values("forecast_date")
+                    forecast_plot = forecast_plot[
+                        forecast_plot["forecast_date"] > latest_date
+                    ].drop_duplicates(subset=["forecast_date"], keep="last")
+
+                    if not forecast_plot.empty:
+                        ci_plot = forecast_plot.dropna(subset=["lower_ci", "upper_ci"]).copy()
+                        if not ci_plot.empty:
+                            fig_price.add_scatter(
+                                x=ci_plot["forecast_date"],
+                                y=ci_plot["upper_ci"],
+                                mode="lines",
+                                line=dict(width=0),
+                                hoverinfo="skip",
+                                showlegend=False,
+                                name="Forecast CI Upper",
+                            )
+                            fig_price.add_scatter(
+                                x=ci_plot["forecast_date"],
+                                y=ci_plot["lower_ci"],
+                                mode="lines",
+                                line=dict(width=0),
+                                fill="tonexty",
+                                fillcolor="rgba(249, 115, 22, 0.16)",
+                                name="Forecast CI",
+                                hovertemplate="%{x}<br>CI lower: %{y:.2f}<extra></extra>",
+                            )
+
+                        fig_price.add_scatter(
+                            x=forecast_plot["forecast_date"],
+                            y=forecast_plot["forecast_price"],
+                            mode="lines",
+                            name=f"Forecast ({forecast_horizon})",
+                            line=dict(color="#f97316", dash="dash", width=2),
+                            hovertemplate="%{x}<br>Forecast: %{y:.2f}<extra></extra>",
+                        )
+                    else:
+                        st.caption("Forecast data is unavailable for this asset and horizon; showing history only.")
+                else:
+                    st.caption("Forecast file is missing or incomplete; showing history only.")
 
             st.plotly_chart(fig_price, use_container_width=True)
 
