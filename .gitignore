@@ -7,14 +7,17 @@ __pycache__/
 input/
 output/
 *.parquet
-*.csv
 *.pkl
 *.joblib
+
+# Ignore most csv
+*.csv
 
 # Allow deployment data files
 !data/mart/investment/top_ranked_assets.csv
 !data/visualization/investment/latest_ranking_for_pbi.csv
 !data/visualization/investment/price_history_for_pbi.csv
+!data/visualization/investment/asset_forecast_for_streamlit.csv
 
 # OS / editor
 .DS_Store
