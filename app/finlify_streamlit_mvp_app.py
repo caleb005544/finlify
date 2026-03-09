@@ -550,10 +550,15 @@ elif page == "Asset Detail":
                 show_forecast = st.checkbox("Show Forecast", value=False, key="asset_show_forecast")
             forecast_horizon = st.radio(
                 "Forecast Horizon",
-                ["30D", "60D", "90D"],
+                ["30D (1M)", "60D (3M)", "90D (4M)"],
                 horizontal=True,
                 key="asset_forecast_horizon",
                 disabled=not show_forecast,
+            )
+            st.caption(
+                "Forecasts are trend-based statistical projections for decision support. "
+                "The shaded band represents a volatility-based uncertainty range, "
+                "not a guaranteed price prediction."
             )
 
         if not price_row.empty and {"date", "close"}.issubset(price_row.columns):
@@ -584,6 +589,10 @@ elif page == "Asset Detail":
                 x="date",
                 y="close",
             )
+            fig_price.update_traces(
+                name="Historical Price",
+                hovertemplate="%{x}<br>Historical Price: %{y:.2f}<extra></extra>",
+            )
             apply_chart_layout(fig_price)
             if "MA20" in price_row.columns:
                 fig_price.add_scatter(
@@ -612,7 +621,7 @@ elif page == "Asset Detail":
             if show_forecast:
                 forecast_available = {"forecast_date", "forecast_price", "horizon"}.issubset(forecast_row.columns)
                 if forecast_available:
-                    horizon_map_forecast = {"30D": 30, "60D": 60, "90D": 90}
+                    horizon_map_forecast = {"30D (1M)": 30, "60D (3M)": 60, "90D (4M)": 90}
                     horizon_limit = horizon_map_forecast.get(forecast_horizon, 90)
                     forecast_plot = forecast_row.copy()
                     forecast_plot = forecast_plot[
@@ -625,35 +634,43 @@ elif page == "Asset Detail":
                     ].drop_duplicates(subset=["forecast_date"], keep="last")
 
                     if not forecast_plot.empty:
+                        fig_price.add_vline(
+                            x=latest_date,
+                            line_dash="dot",
+                            line_color="#64748b",
+                            line_width=1,
+                            annotation_text="Forecast Start",
+                            annotation_position="top left",
+                        )
+
                         ci_plot = forecast_plot.dropna(subset=["lower_ci", "upper_ci"]).copy()
                         if not ci_plot.empty:
                             fig_price.add_scatter(
                                 x=ci_plot["forecast_date"],
-                                y=ci_plot["upper_ci"],
+                                y=ci_plot["lower_ci"],
                                 mode="lines",
-                                line=dict(width=0),
-                                hoverinfo="skip",
-                                showlegend=False,
-                                name="Forecast CI Upper",
+                                line=dict(color="rgba(249, 115, 22, 0.35)", width=1, dash="dot"),
+                                name="Lower Band",
+                                hovertemplate="%{x}<br>Lower Band: %{y:.2f}<extra></extra>",
                             )
                             fig_price.add_scatter(
                                 x=ci_plot["forecast_date"],
-                                y=ci_plot["lower_ci"],
+                                y=ci_plot["upper_ci"],
                                 mode="lines",
-                                line=dict(width=0),
+                                line=dict(color="rgba(249, 115, 22, 0.35)", width=1, dash="dot"),
                                 fill="tonexty",
                                 fillcolor="rgba(249, 115, 22, 0.16)",
-                                name="Forecast CI",
-                                hovertemplate="%{x}<br>CI lower: %{y:.2f}<extra></extra>",
+                                name="Upper Band",
+                                hovertemplate="%{x}<br>Upper Band: %{y:.2f}<extra></extra>",
                             )
 
                         fig_price.add_scatter(
                             x=forecast_plot["forecast_date"],
                             y=forecast_plot["forecast_price"],
                             mode="lines",
-                            name=f"Forecast ({forecast_horizon})",
+                            name="Forecast Price",
                             line=dict(color="#f97316", dash="dash", width=2),
-                            hovertemplate="%{x}<br>Forecast: %{y:.2f}<extra></extra>",
+                            hovertemplate="%{x}<br>Forecast Price: %{y:.2f}<extra></extra>",
                         )
                     else:
                         st.caption("Forecast data is unavailable for this asset and horizon; showing history only.")
