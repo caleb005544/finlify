@@ -10,6 +10,7 @@ raw prices -> normalize -> filter by universe source_ticker -> compute features 
 import argparse
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from src.utils.price_utils import DEFAULT_RAW_PARQUET, iter_normalized_price_chunks, normalize_ticker
@@ -18,6 +19,7 @@ from src.utils.price_utils import DEFAULT_RAW_PARQUET, iter_normalized_price_chu
 DEFAULT_UNIVERSE_CSV = Path("input/finlify_core_universe.csv")
 DEFAULT_TICKER_MASTER = Path("data/staging/stock_price_stooq/ticker_master.parquet")
 DEFAULT_OUTPUT_PARQUET = Path("data/mart/investment/factor_features.parquet")
+DEFAULT_HISTORY_YEARS = 15
 
 
 def parse_args() -> argparse.Namespace:
@@ -62,6 +64,12 @@ def parse_args() -> argparse.Namespace:
         "--active-only",
         action="store_true",
         help="Filter universe to active assets only (is_active=True).",
+    )
+    parser.add_argument(
+        "--history-years",
+        type=int,
+        default=DEFAULT_HISTORY_YEARS,
+        help="Limit each ticker history to this many years anchored at its latest date.",
     )
     return parser.parse_args()
 
@@ -152,10 +160,17 @@ def _compute_price_features_single_ticker(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def build_factor_features(input_parquet: Path, universe_df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, int]]:
+def build_factor_features(
+    input_parquet: Path,
+    universe_df: pd.DataFrame,
+    history_years: int = DEFAULT_HISTORY_YEARS,
+) -> tuple[pd.DataFrame, dict[str, int]]:
     """
     Build row-level factor features for universe assets only.
     """
+    if history_years <= 0:
+        raise ValueError("history_years must be a positive integer.")
+
     universe_tickers = set(universe_df["source_ticker"].astype(str).tolist())
     if not universe_tickers:
         raise ValueError("Universe is empty.")
@@ -187,6 +202,13 @@ def build_factor_features(input_parquet: Path, universe_df: pd.DataFrame) -> tup
             continue
         prices = pd.concat(parts, ignore_index=True)
         prices = prices.sort_values("date").drop_duplicates(subset=["date"], keep="last").reset_index(drop=True)
+
+        latest_date = prices["date"].max()
+        cutoff_date = latest_date - pd.DateOffset(years=history_years)
+        prices = prices[prices["date"] >= cutoff_date].reset_index(drop=True)
+
+        if prices.empty:
+            continue
         expected_counts[str(source_ticker)] = len(prices)
 
         feats = _compute_price_features_single_ticker(prices)
@@ -230,6 +252,46 @@ def build_factor_features(input_parquet: Path, universe_df: pd.DataFrame) -> tup
     return out, expected_counts
 
 
+def build_representative_sample(factor_df: pd.DataFrame, sample_rows: int) -> pd.DataFrame:
+    """
+    Build a deterministic sample that covers all tickers and spans the time range.
+    """
+    if sample_rows <= 0:
+        return factor_df.head(0).copy()
+    if sample_rows >= len(factor_df):
+        return factor_df.copy()
+
+    work = factor_df.copy()
+    work = work.sort_values(["date", "ticker", "source_ticker"], kind="mergesort").reset_index(drop=False)
+    work = work.rename(columns={"index": "_row_id"})
+
+    latest_per_ticker = (
+        work.sort_values(["source_ticker", "date", "ticker"], kind="mergesort")
+        .drop_duplicates(subset=["source_ticker"], keep="last")
+    )
+
+    selected = latest_per_ticker
+    selected_ids = set(selected["_row_id"].tolist())
+
+    remaining_rows = sample_rows - len(selected)
+    if remaining_rows > 0:
+        pool = work[~work["_row_id"].isin(selected_ids)].copy()
+        if not pool.empty:
+            extra_n = min(remaining_rows, len(pool))
+            positions = np.linspace(0, len(pool) - 1, num=extra_n, dtype=int)
+            extra = pool.iloc[positions]
+            selected = pd.concat([selected, extra], ignore_index=True)
+
+    selected = (
+        selected.drop_duplicates(subset=["_row_id"], keep="first")
+        .sort_values(["date", "ticker", "source_ticker"], kind="mergesort")
+        .head(sample_rows)
+        .drop(columns=["_row_id"])
+        .reset_index(drop=True)
+    )
+    return selected
+
+
 def validate_factor_features(factor_df: pd.DataFrame, universe_df: pd.DataFrame, expected_counts: dict[str, int]) -> None:
     """
     Validate universe filtering, ticker isolation, row-count consistency, and metadata joins.
@@ -268,7 +330,11 @@ def main() -> None:
         ticker_master_path=args.ticker_master,
         active_only=args.active_only,
     )
-    factor_df, expected_counts = build_factor_features(args.input_parquet, universe)
+    factor_df, expected_counts = build_factor_features(
+        input_parquet=args.input_parquet,
+        universe_df=universe,
+        history_years=args.history_years,
+    )
     validate_factor_features(factor_df, universe, expected_counts)
 
     args.output_parquet.parent.mkdir(parents=True, exist_ok=True)
@@ -279,10 +345,10 @@ def main() -> None:
 
     if args.sample_csv is not None:
         args.sample_csv.parent.mkdir(parents=True, exist_ok=True)
-        factor_df.head(max(0, args.sample_rows)).to_csv(args.sample_csv, index=False)
+        sample_df = build_representative_sample(factor_df, sample_rows=max(0, args.sample_rows))
+        sample_df.to_csv(args.sample_csv, index=False)
         print(f"Sample CSV written: {args.sample_csv} (rows={min(len(factor_df), max(0, args.sample_rows)):,})")
 
 
 if __name__ == "__main__":
     main()
-
