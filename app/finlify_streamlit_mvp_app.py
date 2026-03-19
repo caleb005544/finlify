@@ -18,6 +18,7 @@ MART_DIR = BASE_DIR / "data/mart"
 RANKING_FILE = MART_DIR / "investment/top_ranked_assets.csv"
 PRICE_FILE = BASE_DIR / "data/visualization/investment/price_history_for_pbi.csv"
 FORECAST_FILE = BASE_DIR / "data/visualization/investment/asset_forecast_for_streamlit.csv"
+HEATMAP_FILE = BASE_DIR / "data/visualization/investment/signal_heatmap_snapshot.csv"
 
 DECISION_COLORS = {
     "BUY": "#16a34a",
@@ -69,6 +70,20 @@ def load_forecasts() -> pd.DataFrame:
         df["horizon"] = pd.to_numeric(df["horizon"], errors="coerce")
 
     for col in ["forecast_price", "lower_ci", "upper_ci", "forecast_ret_1d", "last_actual_close"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    return df
+
+
+@st.cache_data
+def load_heatmap() -> pd.DataFrame:
+    if not HEATMAP_FILE.exists():
+        return pd.DataFrame()
+
+    df = pd.read_csv(HEATMAP_FILE)
+
+    for col in ["confidence", "horizon_days", "composite_score", "rank_overall"]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
@@ -279,7 +294,7 @@ def render_page_explainer(page_type: str) -> None:
 
 def render_top_opportunities(df: pd.DataFrame) -> None:
     if df.empty:
-        render_empty_state("No ranked opportunities available.")
+        render_empty_state("No signal snapshot found for the selected asset type.")
         return
 
     top_df = df.copy()
@@ -338,7 +353,8 @@ def render_decision_snapshot(asset: pd.Series, universe_size: int) -> None:
 rankings_df = load_rankings()
 prices_df = load_prices()
 forecasts_df = load_forecasts()
-most_recent_data_date = get_most_recent_data_date(rankings_df, prices_df)
+heatmap_df = load_heatmap()
+most_recent_data_date = get_most_recent_data_date(rankings_df, prices_df, heatmap_df)
 apply_global_ui_style()
 
 st.sidebar.title("Finlify MVP")
@@ -365,26 +381,45 @@ if page == "Market Overview":
     )
     render_page_explainer("market")
 
+    asset_type_filter = st.radio(
+        "Asset Type",
+        ["All", "stock", "etf"],
+        horizontal=True,
+        key="market_asset_type_filter",
+    )
+
+    filtered_rankings_df = rankings_df.copy()
+    if asset_type_filter != "All" and "asset_type" in filtered_rankings_df.columns:
+        filtered_rankings_df = filtered_rankings_df[
+            filtered_rankings_df["asset_type"].astype(str).str.lower() == asset_type_filter
+        ].copy()
+
+    filtered_heatmap_df = heatmap_df.copy()
+    if asset_type_filter != "All" and not filtered_heatmap_df.empty and "asset_type" in filtered_heatmap_df.columns:
+        filtered_heatmap_df = filtered_heatmap_df[
+            filtered_heatmap_df["asset_type"].astype(str).str.lower() == asset_type_filter
+        ].copy()
+
     buy_ratio = (
-        (rankings_df["decision"].astype(str).str.upper() == "BUY").sum() / len(rankings_df)
-        if "decision" in rankings_df.columns and len(rankings_df) > 0
+        (filtered_rankings_df["decision"].astype(str).str.upper() == "BUY").sum() / len(filtered_rankings_df)
+        if "decision" in filtered_rankings_df.columns and len(filtered_rankings_df) > 0
         else 0
     )
 
     avg_score = (
-        pd.to_numeric(rankings_df["composite_score"], errors="coerce").dropna().mean()
-        if "composite_score" in rankings_df.columns
+        pd.to_numeric(filtered_rankings_df["composite_score"], errors="coerce").dropna().mean()
+        if "composite_score" in filtered_rankings_df.columns
         else None
     )
     buy_count = (
-        int((rankings_df["decision"].astype(str).str.upper() == "BUY").sum())
-        if "decision" in rankings_df.columns
+        int((filtered_rankings_df["decision"].astype(str).str.upper() == "BUY").sum())
+        if "decision" in filtered_rankings_df.columns
         else 0
     )
 
     render_kpi_row(
         [
-            ("Assets Covered", str(len(rankings_df))),
+            ("Assets Covered", str(len(filtered_rankings_df))),
             ("Average Score", format_metric_score(avg_score)),
             ("Buy Signals", str(buy_count)),
             ("Buy Signal Ratio", f"{buy_ratio:.1%}"),
@@ -392,75 +427,83 @@ if page == "Market Overview":
     )
 
     st.subheader("Top Opportunities")
-    render_top_opportunities(rankings_df)
+    render_top_opportunities(filtered_rankings_df)
 
     with st.container():
         st.subheader("Decision Distribution")
-        if "decision" in rankings_df.columns:
+        if filtered_rankings_df.empty:
+            render_empty_state("No ranking data available for the selected asset type.")
+        elif "decision" in filtered_rankings_df.columns:
             decision_counts = (
-                rankings_df["decision"]
+                filtered_rankings_df["decision"]
                 .astype(str)
                 .str.upper()
                 .value_counts()
                 .rename_axis("decision")
                 .reset_index(name="count")
             )
+            decision_counts["decision"] = pd.Categorical(
+                decision_counts["decision"],
+                categories=["BUY", "HOLD", "WATCH", "AVOID"],
+                ordered=True,
+            )
+            decision_counts = decision_counts.sort_values("decision").reset_index(drop=True)
 
-            fig = px.pie(
+            fig = px.bar(
                 decision_counts,
-                names="decision",
-                values="count",
-                hole=0.35,
+                x="decision",
+                y="count",
                 color="decision",
                 color_discrete_map=DECISION_COLORS,
                 category_orders={"decision": ["BUY", "HOLD", "WATCH", "AVOID"]},
             )
-            apply_chart_layout(fig, horizontal_legend=True)
+            apply_chart_layout(fig)
             st.plotly_chart(fig, use_container_width=True)
 
-    st.subheader("Ranked Opportunities")
+    st.subheader("Signal Snapshot")
 
-    display_df = rankings_df.copy()
+    if filtered_heatmap_df.empty:
+        render_empty_state("No signal heatmap snapshot found.")
+    else:
+        heatmap_display = filtered_heatmap_df.copy()
 
-    if "composite_score" in display_df.columns:
-        display_df["composite_score"] = display_df["composite_score"].map(format_score)
-    if "trend_score" in display_df.columns:
-        display_df["trend_score"] = display_df["trend_score"].map(format_score)
-    if "momentum_score" in display_df.columns:
-        display_df["momentum_score"] = display_df["momentum_score"].map(format_score)
-    if "risk_penalty" in display_df.columns:
-        display_df["risk_penalty"] = display_df["risk_penalty"].map(format_score)
+        if "composite_score" in heatmap_display.columns:
+            heatmap_display["composite_score"] = heatmap_display["composite_score"].map(format_score)
 
-    display_df = display_df.rename(
-        columns={
-            "rank": "Rank",
-            "ticker": "Ticker",
-            "asset_type": "Asset Type",
-            "composite_score": "Composite Score",
-            "trend_score": "Trend Score",
-            "momentum_score": "Momentum Score",
-            "risk_penalty": "Risk Penalty",
-            "decision": "Investment Decision",
-        }
-    )
+        heatmap_display = heatmap_display.rename(
+            columns={
+                "ticker": "Ticker",
+                "asset_type": "Asset Type",
+                "decision": "Investment Decision",
+                "confidence": "Confidence",
+                "regime": "Regime",
+                "risk_level": "Risk Level",
+                "horizon_days": "Horizon Days",
+                "composite_score": "Composite Score",
+                "rank_overall": "Rank",
+            }
+        )
 
-    display_cols = [
-        col
-        for col in [
-            "Rank",
-            "Ticker",
-            "Asset Type",
-            "Composite Score",
-            "Trend Score",
-            "Momentum Score",
-            "Risk Penalty",
-            "Investment Decision",
+        heatmap_cols = [
+            col
+            for col in [
+                "Rank",
+                "Ticker",
+                "Asset Type",
+                "Investment Decision",
+                "Confidence",
+                "Regime",
+                "Risk Level",
+                "Horizon Days",
+                "Composite Score",
+            ]
+            if col in heatmap_display.columns
         ]
-        if col in display_df.columns
-    ]
 
-    ranked_table = display_df[display_cols].sort_values("Rank").head(20)
-    render_table(ranked_table, highlight_decision=True)
+        render_table(
+            heatmap_display[heatmap_cols].sort_values("Rank"),
+            highlight_decision=True,
+        )
 
     st.markdown(
         """

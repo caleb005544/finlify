@@ -4,7 +4,13 @@ import unittest
 
 import pandas as pd
 
-from src.ranking.build_rankings import _trend_score, build_rankings
+from src.ranking.build_rankings import (
+    ALLOWED_HORIZON_DAYS,
+    ALLOWED_REGIMES,
+    ALLOWED_RISK_LEVELS,
+    _trend_score,
+    build_rankings,
+)
 
 
 def _make_snapshot(n: int = 12) -> pd.DataFrame:
@@ -49,6 +55,10 @@ class TestBuildRankings(unittest.TestCase):
             "composite_score",
             "decision",
             "decision_reason",
+            "confidence",
+            "regime",
+            "risk_level",
+            "horizon_days",
             "rank_overall",
             "rank_within_asset_type",
         ]:
@@ -180,7 +190,28 @@ class TestBuildRankings(unittest.TestCase):
         self.assertListEqual(ranked1["rank_overall"].tolist(), ranked2["rank_overall"].tolist())
         self.assertListEqual(ranked1["ticker"].tolist(), ["AAA", "BBB", "CCC"])
 
+    def test_signal_engine_v1_fields_are_valid(self) -> None:
+        ranked = build_rankings(_make_snapshot(20))
+
+        self.assertTrue(pd.api.types.is_integer_dtype(ranked["confidence"]))
+        self.assertTrue(pd.api.types.is_integer_dtype(ranked["horizon_days"]))
+        self.assertTrue(((ranked["confidence"] >= 0) & (ranked["confidence"] <= 100)).all())
+        self.assertSetEqual(set(ranked["regime"].unique()), set(ranked["regime"].unique()) & ALLOWED_REGIMES)
+        self.assertSetEqual(
+            set(ranked["risk_level"].unique()),
+            set(ranked["risk_level"].unique()) & ALLOWED_RISK_LEVELS,
+        )
+        self.assertSetEqual(
+            set(ranked["horizon_days"].astype(int).unique()),
+            set(ranked["horizon_days"].astype(int).unique()) & ALLOWED_HORIZON_DAYS,
+        )
+
+    def test_signal_engine_v1_regime_consistency_guards(self) -> None:
+        ranked = build_rankings(_make_snapshot(20))
+
+        self.assertFalse(((ranked["decision"] == "BUY") & (ranked["regime"] == "RISK_OFF")).any())
+        self.assertFalse(((ranked["decision"] == "WATCH") & (ranked["regime"] == "TRENDING")).any())
+
 
 if __name__ == "__main__":
     unittest.main()
-

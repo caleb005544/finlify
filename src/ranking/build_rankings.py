@@ -12,6 +12,11 @@ import pandas as pd
 
 DEFAULT_INPUT_PARQUET = Path("data/mart/investment/factor_snapshot_latest.parquet")
 DEFAULT_OUTPUT_PARQUET = Path("data/mart/investment/top_ranked_assets.parquet")
+DEFAULT_OUTPUT_CSV = Path("data/mart/investment/top_ranked_assets.csv")
+ALLOWED_DECISIONS = {"BUY", "HOLD", "WATCH", "AVOID"}
+ALLOWED_REGIMES = {"TRENDING", "MIXED", "RISK_OFF"}
+ALLOWED_RISK_LEVELS = {"LOW", "MEDIUM", "HIGH"}
+ALLOWED_HORIZON_DAYS = {30, 60, 90}
 
 
 def parse_args() -> argparse.Namespace:
@@ -31,8 +36,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-csv",
         type=Path,
-        default=None,
-        help="Optional CSV output path.",
+        default=DEFAULT_OUTPUT_CSV,
+        help="CSV output path.",
     )
     return parser.parse_args()
 
@@ -111,6 +116,93 @@ def _decision_reason(df: pd.DataFrame) -> pd.Series:
     return df["decision"].map(reason_map).fillna(reason_map["AVOID"]).astype("string")
 
 
+def _derive_regime(df: pd.DataFrame) -> pd.Series:
+    trend = pd.to_numeric(df["trend_score"], errors="coerce")
+    momentum = pd.to_numeric(df["momentum_score"], errors="coerce")
+    risk_abs = pd.to_numeric(df["risk_penalty"], errors="coerce").abs()
+    ret_20d = pd.to_numeric(df["ret_20d"], errors="coerce")
+    ret_60d = pd.to_numeric(df["ret_60d"], errors="coerce")
+    positive_stack = trend + momentum
+
+    regime = pd.Series("MIXED", index=df.index, dtype="string")
+    regime = regime.mask(df["decision"].eq("AVOID"), "RISK_OFF")
+
+    trending_mask = (
+        ~df["decision"].eq("AVOID")
+        & (ret_20d > 0)
+        & (ret_60d > 0)
+        & (trend >= 18)
+        & (momentum >= 24)
+        & (risk_abs <= 4)
+    )
+    regime = regime.mask(trending_mask, "TRENDING")
+
+    risk_off_mask = (
+        ~trending_mask
+        & ~df["decision"].eq("AVOID")
+        & ((risk_abs >= 7) | (positive_stack < 30))
+    )
+    regime = regime.mask(risk_off_mask, "RISK_OFF")
+    return regime
+
+
+def _derive_risk_level(df: pd.DataFrame) -> pd.Series:
+    risk_abs = pd.to_numeric(df["risk_penalty"], errors="coerce").abs()
+    volatility_20d = pd.to_numeric(df["volatility_20d"], errors="coerce")
+    volatility_60d = pd.to_numeric(df["volatility_60d"], errors="coerce")
+    dist_from_52w_high = pd.to_numeric(df["dist_from_52w_high"], errors="coerce")
+    volatility_anchor = pd.concat([volatility_20d, volatility_60d], axis=1).max(axis=1, skipna=True)
+
+    risk_level = pd.Series("LOW", index=df.index, dtype="string")
+    risk_level = risk_level.mask((risk_abs >= 7) | (volatility_anchor >= 0.035), "HIGH")
+    medium_mask = (
+        ~risk_level.eq("HIGH")
+        & ((risk_abs >= 4) | (volatility_anchor >= 0.020) | (dist_from_52w_high <= -0.20))
+    )
+    risk_level = risk_level.mask(medium_mask, "MEDIUM")
+    return risk_level
+
+
+def _derive_confidence(df: pd.DataFrame) -> pd.Series:
+    base_map = {"BUY": 75, "HOLD": 60, "WATCH": 45, "AVOID": 35}
+
+    confidence = df["decision"].map(base_map).fillna(35).astype(float)
+    composite = pd.to_numeric(df["composite_score"], errors="coerce")
+    trend = pd.to_numeric(df["trend_score"], errors="coerce")
+    momentum = pd.to_numeric(df["momentum_score"], errors="coerce")
+    risk_abs = pd.to_numeric(df["risk_penalty"], errors="coerce").abs()
+    signal_balance_gap = (trend - momentum).abs()
+
+    confidence = confidence + ((composite >= 50) * 10) + (((composite >= 40) & (composite < 50)) * 5)
+    confidence = confidence - ((composite < 20) * 5)
+
+    confidence = confidence - ((risk_abs >= 7) * 15) - (((risk_abs >= 4) & (risk_abs < 7)) * 8)
+
+    confidence = confidence + ((signal_balance_gap <= 5) * 5) - ((signal_balance_gap >= 12) * 5)
+
+    buy_boost = df["decision"].eq("BUY") & (trend >= 20) & (momentum >= 25)
+    avoid_boost = df["decision"].eq("AVOID") & (risk_abs >= 7)
+    confidence = confidence + (buy_boost * 5) + (avoid_boost * 5)
+
+    return confidence.clip(lower=0, upper=100).round().astype(int)
+
+
+def _derive_horizon_days(df: pd.DataFrame) -> pd.Series:
+    trend = pd.to_numeric(df["trend_score"], errors="coerce")
+    momentum = pd.to_numeric(df["momentum_score"], errors="coerce")
+
+    horizon = pd.Series(60, index=df.index, dtype="int64")
+    short_mask = df["regime"].eq("RISK_OFF") | df["decision"].eq("WATCH") | df["risk_level"].eq("HIGH")
+    horizon = horizon.mask(short_mask, 30)
+
+    long_mask = df["regime"].eq("TRENDING") & (trend >= momentum) & ~short_mask
+    horizon = horizon.mask(long_mask, 90)
+
+    medium_trending_mask = df["regime"].eq("TRENDING") & (momentum > trend) & ~short_mask
+    horizon = horizon.mask(medium_trending_mask, 60)
+    return horizon
+
+
 def _rank_deterministic(df: pd.DataFrame) -> pd.DataFrame:
     out = df.sort_values(
         ["composite_score", "ticker", "source_ticker"],
@@ -153,10 +245,28 @@ def _validate_output(ranked: pd.DataFrame, input_rows: int) -> None:
         if actual != expected:
             raise ValueError(f"rank_within_asset_type invalid for asset_type={asset_type}")
 
-    allowed_decisions = {"BUY", "HOLD", "WATCH", "AVOID"}
-    bad_decisions = set(ranked["decision"].dropna().unique()) - allowed_decisions
+    bad_decisions = set(ranked["decision"].dropna().unique()) - ALLOWED_DECISIONS
     if bad_decisions:
         raise ValueError(f"Unexpected decision values: {sorted(bad_decisions)}")
+
+    bad_regimes = set(ranked["regime"].dropna().unique()) - ALLOWED_REGIMES
+    if bad_regimes:
+        raise ValueError(f"Unexpected regime values: {sorted(bad_regimes)}")
+
+    bad_risk_levels = set(ranked["risk_level"].dropna().unique()) - ALLOWED_RISK_LEVELS
+    if bad_risk_levels:
+        raise ValueError(f"Unexpected risk_level values: {sorted(bad_risk_levels)}")
+
+    if not pd.api.types.is_integer_dtype(ranked["confidence"]):
+        raise ValueError("confidence is not integer typed.")
+    if ((ranked["confidence"] < 0) | (ranked["confidence"] > 100)).any():
+        raise ValueError("confidence contains values outside 0..100.")
+
+    if not pd.api.types.is_integer_dtype(ranked["horizon_days"]):
+        raise ValueError("horizon_days is not integer typed.")
+    bad_horizons = set(ranked["horizon_days"].dropna().astype(int).unique()) - ALLOWED_HORIZON_DAYS
+    if bad_horizons:
+        raise ValueError(f"Unexpected horizon_days values: {sorted(bad_horizons)}")
 
 
 def build_rankings(snapshot_df: pd.DataFrame) -> pd.DataFrame:
@@ -198,6 +308,19 @@ def build_rankings(snapshot_df: pd.DataFrame) -> pd.DataFrame:
 
     df["decision_reason"] = _decision_reason(df)
     ranked = _rank_deterministic(df)
+    regime = _derive_regime(ranked)
+    regime = regime.mask(
+        (ranked["decision"] == "BUY") & regime.eq("RISK_OFF"),
+        "MIXED",
+    )
+    regime = regime.mask(
+        (ranked["decision"] == "WATCH") & regime.eq("TRENDING"),
+        "MIXED",
+    )
+    ranked["regime"] = regime
+    ranked["risk_level"] = _derive_risk_level(ranked)
+    ranked["confidence"] = _derive_confidence(ranked)
+    ranked["horizon_days"] = _derive_horizon_days(ranked)
 
     out_cols = [
         "source_ticker",
@@ -223,6 +346,10 @@ def build_rankings(snapshot_df: pd.DataFrame) -> pd.DataFrame:
         "is_active",
         "source",
         "decision_reason",
+        "confidence",
+        "regime",
+        "risk_level",
+        "horizon_days",
     ]
     ranked = ranked[out_cols].sort_values(["rank_overall", "ticker"], kind="mergesort").reset_index(drop=True)
     _validate_output(ranked, input_rows=len(snapshot_df))
@@ -242,10 +369,9 @@ def main() -> None:
     print(f"Ranked assets parquet written: {args.output_parquet}")
     print(f"Rows: {len(ranked):,}")
 
-    if args.output_csv is not None:
-        args.output_csv.parent.mkdir(parents=True, exist_ok=True)
-        ranked.to_csv(args.output_csv, index=False)
-        print(f"Ranked assets csv written: {args.output_csv}")
+    args.output_csv.parent.mkdir(parents=True, exist_ok=True)
+    ranked.to_csv(args.output_csv, index=False, encoding="utf-8")
+    print(f"Ranked assets csv written: {args.output_csv}")
 
 
 if __name__ == "__main__":
