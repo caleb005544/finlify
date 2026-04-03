@@ -18,7 +18,6 @@ MART_DIR = BASE_DIR / "data/mart"
 RANKING_FILE = MART_DIR / "investment/top_ranked_assets.csv"
 PRICE_FILE = BASE_DIR / "data/visualization/investment/price_history_for_pbi.csv"
 FORECAST_FILE = BASE_DIR / "data/visualization/investment/asset_forecast_for_streamlit.csv"
-HEATMAP_FILE = BASE_DIR / "data/visualization/investment/signal_heatmap_snapshot.csv"
 
 DECISION_COLORS = {
     "BUY": "#16a34a",
@@ -70,20 +69,6 @@ def load_forecasts() -> pd.DataFrame:
         df["horizon"] = pd.to_numeric(df["horizon"], errors="coerce")
 
     for col in ["forecast_price", "lower_ci", "upper_ci", "forecast_ret_1d", "last_actual_close"]:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-
-    return df
-
-
-@st.cache_data
-def load_heatmap() -> pd.DataFrame:
-    if not HEATMAP_FILE.exists():
-        return pd.DataFrame()
-
-    df = pd.read_csv(HEATMAP_FILE)
-
-    for col in ["confidence", "horizon_days", "composite_score", "rank_overall"]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
@@ -353,8 +338,7 @@ def render_decision_snapshot(asset: pd.Series, universe_size: int) -> None:
 rankings_df = load_rankings()
 prices_df = load_prices()
 forecasts_df = load_forecasts()
-heatmap_df = load_heatmap()
-most_recent_data_date = get_most_recent_data_date(rankings_df, prices_df, heatmap_df)
+most_recent_data_date = get_most_recent_data_date(rankings_df, prices_df)
 apply_global_ui_style()
 
 st.sidebar.title("Finlify MVP")
@@ -392,12 +376,6 @@ if page == "Market Overview":
     if asset_type_filter != "All" and "asset_type" in filtered_rankings_df.columns:
         filtered_rankings_df = filtered_rankings_df[
             filtered_rankings_df["asset_type"].astype(str).str.lower() == asset_type_filter
-        ].copy()
-
-    filtered_heatmap_df = heatmap_df.copy()
-    if asset_type_filter != "All" and not filtered_heatmap_df.empty and "asset_type" in filtered_heatmap_df.columns:
-        filtered_heatmap_df = filtered_heatmap_df[
-            filtered_heatmap_df["asset_type"].astype(str).str.lower() == asset_type_filter
         ].copy()
 
     buy_ratio = (
@@ -459,51 +437,6 @@ if page == "Market Overview":
             )
             apply_chart_layout(fig)
             st.plotly_chart(fig, use_container_width=True)
-
-    st.subheader("Signal Snapshot")
-
-    if filtered_heatmap_df.empty:
-        render_empty_state("No signal heatmap snapshot found.")
-    else:
-        heatmap_display = filtered_heatmap_df.copy()
-
-        if "composite_score" in heatmap_display.columns:
-            heatmap_display["composite_score"] = heatmap_display["composite_score"].map(format_score)
-
-        heatmap_display = heatmap_display.rename(
-            columns={
-                "ticker": "Ticker",
-                "asset_type": "Asset Type",
-                "decision": "Investment Decision",
-                "confidence": "Confidence",
-                "regime": "Regime",
-                "risk_level": "Risk Level",
-                "horizon_days": "Horizon Days",
-                "composite_score": "Composite Score",
-                "rank_overall": "Rank",
-            }
-        )
-
-        heatmap_cols = [
-            col
-            for col in [
-                "Rank",
-                "Ticker",
-                "Asset Type",
-                "Investment Decision",
-                "Confidence",
-                "Regime",
-                "Risk Level",
-                "Horizon Days",
-                "Composite Score",
-            ]
-            if col in heatmap_display.columns
-        ]
-
-        render_table(
-            heatmap_display[heatmap_cols].sort_values("Rank"),
-            highlight_decision=True,
-        )
 
     st.markdown(
         """
