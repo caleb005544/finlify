@@ -1,0 +1,43 @@
+name: Daily Pipeline
+
+on:
+  schedule:
+    # Monday-Friday at 23:00 UTC (2h after NYSE close)
+    - cron: "0 23 * * 1-5"
+  workflow_dispatch:
+
+env:
+  POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+
+jobs:
+  daily-pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: "Step 1: Ingest daily prices from Polygon"
+        run: python -m src.ingestion.ingest_polygon
+
+      - name: "Steps 2-8: Run pipeline"
+        run: python scripts/run_pipeline.py --from-step 2 --to-step 8
+
+      - name: Print pipeline summary
+        if: always()
+        run: |
+          SUMMARY=$(ls -t output/pipeline_runs/*/summary.json 2>/dev/null | head -1)
+          if [ -n "$SUMMARY" ]; then
+            echo "--- $SUMMARY ---"
+            tail -20 "$SUMMARY"
+          else
+            echo "No summary.json found"
+          fi
