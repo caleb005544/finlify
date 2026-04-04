@@ -22,6 +22,9 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+import psycopg2
+from psycopg2.extras import execute_values
+
 from src.ingestion.fetch_polygon import fetch_grouped_daily
 
 # ---------------------------------------------------------------------------
@@ -109,6 +112,47 @@ def _streaming_append(parquet_path: Path, new_table: pa.Table) -> None:
             writer.close()
     finally:
         Path(tmp_path).unlink(missing_ok=True)
+
+
+def _upsert_to_supabase(raw_df: pd.DataFrame) -> int | None:
+    """Upsert raw_df rows into Supabase stock_prices. Returns inserted count or None if skipped."""
+    db_url = os.environ.get("SUPABASE_DB_URL")
+    if not db_url:
+        print("  WARNING: SUPABASE_DB_URL not set — skipping Supabase upsert")
+        return None
+
+    out = pd.DataFrame(
+        {
+            "source_ticker": raw_df["symbol_raw"],
+            "ticker": raw_df["symbol_raw"].str.replace(r"\.\w+$", "", regex=True),
+            "date": raw_df["payload_date"],
+            "open": raw_df["open_raw"],
+            "high": raw_df["high_raw"],
+            "low": raw_df["low_raw"],
+            "close": raw_df["close_raw"],
+            "volume": raw_df["volume_raw"],
+            "source_system": raw_df["source_system"],
+            "ingested_at": raw_df["ingested_at"],
+        }
+    )
+
+    sql = """
+        INSERT INTO stock_prices
+            (source_ticker, ticker, date, open, high, low, close, volume, source_system, ingested_at)
+        VALUES %s
+        ON CONFLICT (source_ticker, date) DO NOTHING
+    """
+    conn = psycopg2.connect(db_url)
+    try:
+        rows = list(out.itertuples(index=False, name=None))
+        with conn.cursor() as cur:
+            execute_values(cur, sql, rows, page_size=1000)
+            inserted = cur.rowcount
+        conn.commit()
+    finally:
+        conn.close()
+
+    return inserted
 
 
 def main() -> None:
@@ -211,6 +255,12 @@ def main() -> None:
     print(f"Appending {len(raw_df):,} rows...")
     new_table = pa.Table.from_pandas(raw_df, preserve_index=False)
     _streaming_append(PARQUET_PATH, new_table)
+
+    # 7b. Upsert to Supabase
+    print("Upserting to Supabase...")
+    sb_inserted = _upsert_to_supabase(raw_df)
+    if sb_inserted is not None:
+        print(f"  Supabase: {sb_inserted} inserted, {len(raw_df) - sb_inserted} skipped (already existed)")
 
     # 8. Summary
     final_pf = pq.ParquetFile(PARQUET_PATH)

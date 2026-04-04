@@ -8,6 +8,9 @@ on:
 
 env:
   POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+  SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+  SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
 
 jobs:
   daily-pipeline:
@@ -27,6 +30,9 @@ jobs:
 
       - name: "Step 1: Ingest daily prices from Polygon"
         run: python -m src.ingestion.ingest_polygon
+
+      - name: "Step 1b: Rebuild parquet from Supabase"
+        run: python scripts/pull_from_supabase.py
 
       - name: "Steps 2-8: Run pipeline"
         run: python scripts/run_pipeline.py --from-step 2 --to-step 8
