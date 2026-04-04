@@ -5,9 +5,15 @@ Build Finlify ranked asset table from latest factor snapshot.
 """
 
 import argparse
+import os
 from pathlib import Path
 
 import pandas as pd
+import psycopg2
+from psycopg2.extras import execute_values
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 DEFAULT_INPUT_PARQUET = Path("data/mart/investment/factor_snapshot_latest.parquet")
@@ -356,6 +362,63 @@ def build_rankings(snapshot_df: pd.DataFrame) -> pd.DataFrame:
     return ranked
 
 
+def _upsert_rankings_to_supabase(ranked_df: pd.DataFrame) -> None:
+    db_url = os.environ.get("SUPABASE_DB_URL")
+    if not db_url:
+        print("WARNING: SUPABASE_DB_URL not set — skipping Supabase upsert")
+        return
+
+    out = pd.DataFrame(
+        {
+            "source_ticker": ranked_df["source_ticker"],
+            "ticker": ranked_df["ticker"],
+            "asset_type": ranked_df["asset_type"],
+            "snapshot_date": ranked_df["date"],
+            "composite_score": ranked_df["composite_score"],
+            "trend_score": ranked_df["trend_score"],
+            "momentum_score": ranked_df["momentum_score"],
+            "risk_penalty": ranked_df["risk_penalty"],
+            "decision": ranked_df["decision"],
+            "rank_overall": ranked_df["rank_overall"],
+            "confidence": ranked_df["confidence"],
+            "regime": ranked_df["regime"],
+            "risk_level": ranked_df["risk_level"],
+            "horizon_days": ranked_df["horizon_days"],
+        }
+    )
+
+    sql = """
+        INSERT INTO rankings
+            (source_ticker, ticker, asset_type, snapshot_date, composite_score,
+             trend_score, momentum_score, risk_penalty, decision, rank_overall,
+             confidence, regime, risk_level, horizon_days)
+        VALUES %s
+        ON CONFLICT (source_ticker, snapshot_date) DO UPDATE SET
+            ticker = EXCLUDED.ticker,
+            asset_type = EXCLUDED.asset_type,
+            composite_score = EXCLUDED.composite_score,
+            trend_score = EXCLUDED.trend_score,
+            momentum_score = EXCLUDED.momentum_score,
+            risk_penalty = EXCLUDED.risk_penalty,
+            decision = EXCLUDED.decision,
+            rank_overall = EXCLUDED.rank_overall,
+            confidence = EXCLUDED.confidence,
+            regime = EXCLUDED.regime,
+            risk_level = EXCLUDED.risk_level,
+            horizon_days = EXCLUDED.horizon_days
+    """
+    conn = psycopg2.connect(db_url)
+    try:
+        rows = list(out.itertuples(index=False, name=None))
+        with conn.cursor() as cur:
+            execute_values(cur, sql, rows, page_size=1000)
+            upserted = cur.rowcount
+        conn.commit()
+        print(f"Supabase rankings: {upserted} rows upserted")
+    finally:
+        conn.close()
+
+
 def main() -> None:
     args = parse_args()
     if not args.input_parquet.exists():
@@ -372,6 +435,8 @@ def main() -> None:
     args.output_csv.parent.mkdir(parents=True, exist_ok=True)
     ranked.to_csv(args.output_csv, index=False, encoding="utf-8")
     print(f"Ranked assets csv written: {args.output_csv}")
+
+    _upsert_rankings_to_supabase(ranked)
 
 
 if __name__ == "__main__":
