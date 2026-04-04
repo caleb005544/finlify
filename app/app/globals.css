@@ -73,6 +73,11 @@
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
+  --fin-green: #00c87a;
+  --fin-red: #ff4d4d;
+  --fin-amber: #f5a623;
+  --fin-blue: #3b9eff;
+  --fin-muted: #8b8fa8;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -123,8 +128,15 @@
   }
   body {
     @apply bg-background text-foreground;
+    background: #0a0e1a;
+    color: #e2e8f0;
   }
   html {
     @apply font-sans;
   }
+}
+
+.dark-dashboard {
+  background: #0a0e1a;
+  color: #e2e8f0;
 }
