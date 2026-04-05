@@ -24,7 +24,6 @@ output/
 .vscode/
 .idea/
 .env
-.env.local
 
 # Streamlit / logs
 .streamlit/secrets.toml

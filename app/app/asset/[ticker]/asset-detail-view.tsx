@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Sparkles, Loader2 } from "lucide-react";
 import {
   AreaChart,
   Area,
@@ -80,44 +79,6 @@ export function AssetDetailView({
 }) {
   const router = useRouter();
   const [range, setRange] = useState("3M");
-  const [analysis, setAnalysis] = useState<{
-    technical: string;
-    fundamental: string;
-    market: string;
-    macro: string;
-    summary: string;
-  } | null>(null);
-  const [analysisLoading, setAnalysisLoading] = useState(false);
-  const [analysisError, setAnalysisError] = useState<string | null>(null);
-
-  const generateAnalysis = useCallback(async () => {
-    setAnalysisLoading(true);
-    setAnalysisError(null);
-    try {
-      const res = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ticker: ranking.ticker,
-          composite_score: ranking.composite_score,
-          trend_score: ranking.trend_score,
-          momentum_score: ranking.momentum_score,
-          risk_penalty: ranking.risk_penalty,
-          decision: ranking.decision,
-          regime: ranking.regime,
-          risk_level: ranking.risk_level,
-        }),
-      });
-      if (!res.ok) throw new Error("Analysis request failed");
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      setAnalysis(data);
-    } catch (err) {
-      setAnalysisError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      setAnalysisLoading(false);
-    }
-  }, [ranking]);
 
   const filteredPrices = useMemo(() => {
     const selected = TIME_RANGES.find((r) => r.label === range)!;
@@ -310,81 +271,6 @@ export function AssetDetailView({
               </div>
             </div>
           </div>
-        </div>
-
-        {/* AI Analysis */}
-        <div className="mt-6">
-          {!analysis && !analysisLoading && (
-            <button
-              onClick={generateAnalysis}
-              className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-5 py-3 text-sm font-medium text-slate-300 hover:border-violet-500/50 hover:text-violet-400 transition-all"
-            >
-              <Sparkles className="h-4 w-4" />
-              Generate AI Analysis
-            </button>
-          )}
-
-          {analysisLoading && (
-            <div className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900 px-5 py-4">
-              <Loader2 className="h-4 w-4 animate-spin text-violet-400" />
-              <span className="text-sm text-slate-400">Analyzing {ranking.ticker} with web search...</span>
-            </div>
-          )}
-
-          {analysisError && (
-            <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-4">
-              <p className="text-sm text-red-400">{analysisError}</p>
-              <button
-                onClick={generateAnalysis}
-                className="mt-2 text-xs text-slate-400 hover:text-slate-200"
-              >
-                Retry
-              </button>
-            </div>
-          )}
-
-          {analysis && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-violet-400" />
-                <h2 className="text-sm font-semibold text-slate-300">AI Analysis</h2>
-                <button
-                  onClick={generateAnalysis}
-                  className="ml-auto text-xs text-slate-500 hover:text-slate-300"
-                >
-                  Regenerate
-                </button>
-              </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {([
-                  { key: "technical",    label: "Technical",    icon: "📊" },
-                  { key: "fundamental",  label: "Fundamental",  icon: "📈" },
-                  { key: "market",       label: "Market",       icon: "📰" },
-                  { key: "macro",        label: "Macro",        icon: "🌍" },
-                ] as const).map(({ key, label, icon }) => (
-                  <div
-                    key={key}
-                    className="rounded-xl border border-slate-800 bg-slate-900 p-4"
-                  >
-                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-2">
-                      {icon} {label}
-                    </p>
-                    <p className="text-sm leading-relaxed text-slate-300">
-                      {analysis[key]}
-                    </p>
-                  </div>
-                ))}
-              </div>
-              <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-4">
-                <p className="text-xs font-semibold uppercase tracking-widest text-violet-400 mb-2">
-                  Summary
-                </p>
-                <p className="text-sm leading-relaxed text-slate-200">
-                  {analysis.summary}
-                </p>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>
