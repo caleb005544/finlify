@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { Search } from "lucide-react";
 import type { Ranking, Decision } from "@/types/rankings";
 
 const D_COLOR: Record<Decision, { badge: string; text: string; bar: string }> = {
@@ -43,8 +44,13 @@ export function RankingsView({
   counts: Record<Decision, number>;
 }) {
   const [filter, setFilter] = useState<Decision | "ALL">("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
   const topBuys = rankings.filter((r) => r.decision === "BUY").slice(0, 5);
-  const filtered = filter === "ALL" ? rankings : rankings.filter((r) => r.decision === filter);
+  const filtered = rankings.filter((r) => {
+    const matchesDecision = filter === "ALL" || r.decision === filter;
+    const matchesSearch = r.ticker.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesDecision && matchesSearch;
+  });
 
   return (
     <div className="space-y-6">
@@ -108,6 +114,21 @@ export function RankingsView({
           </div>
         </div>
       )}
+
+      {/* Search bar */}
+      <div className="relative flex items-center">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+        <input
+          type="text"
+          placeholder="Search ticker..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full max-w-xs pl-9 pr-4 py-2 rounded-md border border-slate-700 bg-slate-900 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+        />
+        <span className="ml-4 text-sm text-slate-500">
+          {filtered.length} / {rankings.length} tickers
+        </span>
+      </div>
 
       {/* Rankings table */}
       <div className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden">

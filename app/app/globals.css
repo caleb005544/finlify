@@ -140,3 +140,16 @@
   background: #0a0e1a;
   color: #e2e8f0;
 }
+
+:root {
+  --font-body: var(--font-inter);
+  --font-display: var(--font-dm-sans);
+}
+
+body {
+  font-family: var(--font-body), sans-serif;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display), sans-serif;
+}
