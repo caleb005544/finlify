@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -117,7 +117,7 @@ function CompanyInfoCard({ ticker }: { ticker: string }) {
 
   if (!info) return null;
 
-  const fields: { label: string; value: string | JSX.Element }[] = [];
+  const fields: { label: string; value: string | ReactNode }[] = [];
   if (info.sic_description) fields.push({ label: "Industry", value: info.sic_description });
   if (info.market_cap) fields.push({ label: "Market Cap", value: fmtCap(info.market_cap) });
   if (info.total_employees) fields.push({ label: "Employees", value: fmtEmployees(info.total_employees) });
