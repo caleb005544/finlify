@@ -6,6 +6,7 @@ import Link from "next/link";
 import {
   AreaChart,
   Area,
+  Line,
   XAxis,
   YAxis,
   Tooltip,
@@ -41,6 +42,12 @@ const TIME_RANGES = [
   { label: "ALL", days: 9999 },
 ];
 
+const MA_LINES = [
+  { key: "ma30",  period: 30,  color: "#f59e0b", label: "MA30"  },
+  { key: "ma50",  period: 50,  color: "#3b82f6", label: "MA50"  },
+  { key: "ma120", period: 120, color: "#a855f7", label: "MA120" },
+] as const;
+
 type PriceRow = { date: string; open: number; high: number; low: number; close: number; volume: number };
 
 function ScoreBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
@@ -58,12 +65,16 @@ function ScoreBar({ label, value, max, color }: { label: string; value: number; 
   );
 }
 
-const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) => {
+const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: { dataKey: string; value: number; color: string }[]; label?: string }) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs">
       <p className="text-slate-400 mb-1">{label}</p>
-      <p className="font-mono font-bold text-slate-100">${payload[0].value.toFixed(2)}</p>
+      {payload.map((p) => (
+        <p key={p.dataKey} className="font-mono" style={{ color: p.color }}>
+          {p.dataKey === "close" ? "" : p.dataKey.toUpperCase() + " "}${p.value?.toFixed(2) ?? "—"}
+        </p>
+      ))}
     </div>
   );
 };
@@ -79,6 +90,7 @@ export function AssetDetailView({
 }) {
   const router = useRouter();
   const [range, setRange] = useState("3M");
+  const [maVisible, setMaVisible] = useState<Record<string, boolean>>({ ma30: true, ma50: true, ma120: true });
 
   const filteredPrices = useMemo(() => {
     const selected = TIME_RANGES.find((r) => r.label === range)!;
@@ -95,10 +107,31 @@ export function AssetDetailView({
   const isUp = pctChange >= 0;
   const chartColor = isUp ? "#00c87a" : "#ff4d4d";
 
-  const chartData = filteredPrices.map((p) => ({
-    date: p.date.slice(0, 10),
-    close: parseFloat(p.close.toFixed(2)),
-  }));
+  const chartData = useMemo(() => {
+    // Use full prices array for MA calculation, then slice to filtered range
+    const allCloses = prices.map((p) => p.close);
+    const filteredStartIdx = filteredPrices.length > 0
+      ? prices.findIndex((p) => p.date === filteredPrices[0].date)
+      : 0;
+
+    const result = filteredPrices.map((p, i) => {
+      const globalIdx = filteredStartIdx + i;
+      const row: Record<string, number | null | string> = {
+        date: p.date.slice(0, 10),
+        close: parseFloat(p.close.toFixed(2)),
+      };
+      for (const { key, period } of MA_LINES) {
+        if (globalIdx >= period - 1) {
+          const slice = allCloses.slice(globalIdx - period + 1, globalIdx + 1);
+          row[key] = parseFloat((slice.reduce((a, b) => a + b, 0) / period).toFixed(2));
+        } else {
+          row[key] = null;
+        }
+      }
+      return row;
+    });
+    return result;
+  }, [prices, filteredPrices]);
 
   return (
     <div style={{ background: "#0a0e1a", minHeight: "100vh", color: "#e2e8f0" }}>
@@ -147,20 +180,41 @@ export function AssetDetailView({
             <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-semibold text-slate-400">Price History</h2>
-                <div className="flex gap-1">
-                  {TIME_RANGES.map((r) => (
-                    <button
-                      key={r.label}
-                      onClick={() => setRange(r.label)}
-                      className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
-                        range === r.label
-                          ? "bg-slate-700 text-slate-100"
-                          : "text-slate-500 hover:text-slate-300"
-                      }`}
-                    >
-                      {r.label}
-                    </button>
-                  ))}
+                <div className="flex items-center gap-3">
+                  {/* MA toggles */}
+                  <div className="flex gap-1">
+                    {MA_LINES.map(({ key, label, color }) => (
+                      <button
+                        key={key}
+                        onClick={() => setMaVisible((prev) => ({ ...prev, [key]: !prev[key] }))}
+                        className={`px-2 py-1 rounded text-[10px] font-bold transition-all border ${
+                          maVisible[key]
+                            ? "border-current opacity-100"
+                            : "border-slate-700 opacity-40"
+                        }`}
+                        style={{ color }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="w-px h-4 bg-slate-700" />
+                  {/* Time range */}
+                  <div className="flex gap-1">
+                    {TIME_RANGES.map((r) => (
+                      <button
+                        key={r.label}
+                        onClick={() => setRange(r.label)}
+                        className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
+                          range === r.label
+                            ? "bg-slate-700 text-slate-100"
+                            : "text-slate-500 hover:text-slate-300"
+                        }`}
+                      >
+                        {r.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
               <ResponsiveContainer width="100%" height={280}>
@@ -197,6 +251,20 @@ export function AssetDetailView({
                     fill="url(#chartGrad)"
                     dot={false}
                   />
+                  {MA_LINES.map(({ key, color }) =>
+                    maVisible[key] ? (
+                      <Line
+                        key={key}
+                        type="monotone"
+                        dataKey={key}
+                        stroke={color}
+                        strokeWidth={1}
+                        strokeDasharray="4 3"
+                        dot={false}
+                        connectNulls={false}
+                      />
+                    ) : null
+                  )}
                 </AreaChart>
               </ResponsiveContainer>
             </div>
