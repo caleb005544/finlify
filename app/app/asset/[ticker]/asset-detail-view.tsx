@@ -526,6 +526,38 @@ export function AssetDetailView({
                 <span className="text-sm font-bold tabular-nums text-slate-200">{ranking.confidence}%</span>
               </div>
             </div>
+
+            {/* Why DECISION? */}
+            <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
+              <p className={`text-xs font-semibold uppercase tracking-widest mb-3 ${D_COLOR[ranking.decision].text}`}>
+                Why {ranking.decision}?
+              </p>
+              <ul className="space-y-2">
+                {(() => {
+                  const reasons: { text: string; weight: number }[] = [];
+                  const rp = Math.abs(ranking.risk_penalty);
+                  if (ranking.trend_score > 25)    reasons.push({ text: "Trend is strong — price is trading above key moving averages", weight: ranking.trend_score });
+                  if (ranking.trend_score < 15)    reasons.push({ text: "Trend is weak — price is below key moving averages", weight: 30 - ranking.trend_score });
+                  if (ranking.momentum_score > 30)  reasons.push({ text: "Momentum is accelerating across multiple timeframes", weight: ranking.momentum_score });
+                  if (ranking.momentum_score < 15)  reasons.push({ text: "Momentum is fading — recent returns are underperforming", weight: 40 - ranking.momentum_score });
+                  if (rp < 5)                       reasons.push({ text: "Volatility is contained — drawdown risk is low", weight: 10 - rp });
+                  if (rp > 7)                       reasons.push({ text: "Elevated volatility — price has pulled back significantly from highs", weight: rp });
+                  if (ranking.confidence >= 70)     reasons.push({ text: "Signal confidence is high — factors are broadly aligned", weight: ranking.confidence / 10 });
+                  if (ranking.confidence < 40)      reasons.push({ text: "Mixed signals — factor alignment is weak", weight: (100 - ranking.confidence) / 10 });
+                  if (ranking.regime === "TRENDING") reasons.push({ text: "Market regime is trending — conditions favor momentum", weight: 7 });
+                  if (ranking.regime === "RISK_OFF") reasons.push({ text: "Market regime is risk-off — caution advised", weight: 7 });
+                  return reasons
+                    .sort((a, b) => b.weight - a.weight)
+                    .slice(0, 3)
+                    .map(({ text }) => (
+                      <li key={text} className="flex items-start gap-2 text-xs leading-relaxed text-slate-400">
+                        <span className="mt-0.5 text-slate-600">•</span>
+                        {text}
+                      </li>
+                    ));
+                })()}
+              </ul>
+            </div>
           </div>
         </div>
       </div>
