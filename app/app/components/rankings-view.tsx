@@ -44,12 +44,30 @@ export function RankingsView({
   counts: Record<Decision, number>;
 }) {
   const [filter, setFilter] = useState<Decision | "ALL">("ALL");
+  const [assetFilter, setAssetFilter] = useState<"ALL" | "stock" | "etf">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
-  const topBuys = rankings.filter((r) => r.decision === "BUY").slice(0, 5);
+
+  // Base set: filtered by asset type only (for KPI cards)
+  const assetFiltered = assetFilter === "ALL" ? rankings : rankings.filter((r) => r.asset_type === assetFilter);
+
+  // Dynamic counts based on asset filter
+  const dynamicCounts = { BUY: 0, HOLD: 0, WATCH: 0, AVOID: 0 };
+  for (const r of assetFiltered) dynamicCounts[r.decision as Decision]++;
+
+  // Asset type counts (reflect decision filter)
+  const decisionFiltered = filter === "ALL" ? rankings : rankings.filter((r) => r.decision === filter);
+  const stockCount = decisionFiltered.filter((r) => r.asset_type === "stock").length;
+  const etfCount = decisionFiltered.filter((r) => r.asset_type === "etf").length;
+
+  // Top BUY cards: respect asset filter
+  const topBuys = assetFiltered.filter((r) => r.decision === "BUY").slice(0, 5);
+
+  // Full filter: decision + asset type + search
   const filtered = rankings.filter((r) => {
     const matchesDecision = filter === "ALL" || r.decision === filter;
+    const matchesAsset = assetFilter === "ALL" || r.asset_type === assetFilter;
     const matchesSearch = r.ticker.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesDecision && matchesSearch;
+    return matchesDecision && matchesAsset && matchesSearch;
   });
 
   return (
@@ -68,10 +86,10 @@ export function RankingsView({
           >
             <p className="text-xs font-medium tracking-widest text-slate-500">{d}</p>
             <p className={`mt-1 text-3xl font-bold tabular-nums ${D_COLOR[d].text}`}>
-              {counts[d]}
+              {dynamicCounts[d]}
             </p>
             <p className="mt-1 text-xs text-slate-600">
-              {((counts[d] / rankings.length) * 100).toFixed(0)}% of universe
+              {assetFiltered.length > 0 ? ((dynamicCounts[d] / assetFiltered.length) * 100).toFixed(0) : 0}% of {assetFilter === "ALL" ? "universe" : assetFilter}
             </p>
           </div>
         ))}
@@ -115,17 +133,38 @@ export function RankingsView({
         </div>
       )}
 
-      {/* Search bar */}
-      <div className="relative flex items-center">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-        <input
-          type="text"
-          placeholder="Search ticker..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full max-w-xs pl-9 pr-4 py-2 rounded-md border border-slate-700 bg-slate-900 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
-        />
-        <span className="ml-4 text-sm text-slate-500">
+      {/* Search bar + asset type filter */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+          <input
+            type="text"
+            placeholder="Search ticker..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full max-w-xs pl-9 pr-4 py-2 rounded-md border border-slate-700 bg-slate-900 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+          />
+        </div>
+        <div className="flex rounded-lg border border-slate-700 overflow-hidden">
+          {([
+            { key: "ALL" as const,   label: "ALL",   count: decisionFiltered.length },
+            { key: "stock" as const, label: "STOCK", count: stockCount },
+            { key: "etf" as const,   label: "ETF",   count: etfCount },
+          ]).map(({ key, label, count }) => (
+            <button
+              key={key}
+              onClick={() => setAssetFilter(assetFilter === key ? "ALL" : key)}
+              className={`px-3 py-1.5 text-xs font-medium transition-all ${
+                assetFilter === key
+                  ? "bg-slate-200 text-slate-900"
+                  : "bg-slate-900 text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              {label} <span className="text-[10px] opacity-60">({count})</span>
+            </button>
+          ))}
+        </div>
+        <span className="text-sm text-slate-500">
           {filtered.length} / {rankings.length} tickers
         </span>
       </div>
