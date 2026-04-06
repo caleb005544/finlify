@@ -137,11 +137,11 @@ function CompanyInfoCard({ ticker }: { ticker: string }) {
     <div className="rounded-xl border border-slate-800 bg-slate-900 p-4 mb-6">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          {info.name && <h2 className="text-sm font-semibold text-slate-200 truncate">{info.name}</h2>}
+          {info.name && <h2 className="text-base font-semibold text-slate-200 truncate">{info.name}</h2>}
           {fields.length > 0 && (
             <div className="flex flex-wrap gap-x-5 gap-y-1 mt-2">
               {fields.map(({ label, value }) => (
-                <div key={label} className="flex items-center gap-1.5 text-xs">
+                <div key={label} className="flex items-center gap-1.5 text-sm">
                   <span className="text-slate-500">{label}</span>
                   <span className="text-slate-300">{value}</span>
                 </div>
@@ -152,7 +152,7 @@ function CompanyInfoCard({ ticker }: { ticker: string }) {
       </div>
       {info.description && (
         <div className="mt-3">
-          <p className={`text-xs leading-relaxed text-slate-400 ${expanded ? "" : "line-clamp-3"}`}>
+          <p className={`text-sm leading-relaxed text-slate-400 ${expanded ? "" : "line-clamp-3"}`}>
             {info.description}
           </p>
           {info.description.length > 200 && (
@@ -326,7 +326,7 @@ export function AssetDetailView({
             {/* Chart card */}
             <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-semibold text-slate-400">Price History</h2>
+                <h2 className="text-sm font-semibold text-slate-200">Price History</h2>
                 <div className="flex items-center gap-3">
                   {/* MA toggles */}
                   <div className="flex gap-1">
@@ -379,14 +379,14 @@ export function AssetDetailView({
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                   <XAxis
                     dataKey="date"
-                    tick={{ fill: "#64748b", fontSize: 11 }}
+                    tick={{ fill: "#94a3b8", fontSize: 12 }}
                     tickLine={false}
                     axisLine={false}
                     interval="preserveStartEnd"
-                    tickFormatter={(v) => v.slice(5)}
+                    tickFormatter={(v) => v.slice(5).replace("-", "/")}
                   />
                   <YAxis
-                    tick={{ fill: "#64748b", fontSize: 11 }}
+                    tick={{ fill: "#94a3b8", fontSize: 12 }}
                     tickLine={false}
                     axisLine={false}
                     tickFormatter={(v) => `$${v}`}
@@ -471,8 +471,8 @@ export function AssetDetailView({
                     { label: "Volume",   val: (last.volume / 1e6).toFixed(1) + "M" },
                   ].map(({ label, val }) => (
                     <div key={label} className="rounded-lg border border-slate-800 bg-slate-900 p-3">
-                      <p className="text-xs text-slate-500">{label}</p>
-                      <p className="mt-1 font-mono text-sm font-semibold text-slate-200">{val}</p>
+                      <p className="text-sm text-slate-400">{label}</p>
+                      <p className="mt-1 font-mono text-base font-semibold text-slate-200">{val}</p>
                     </div>
                   ))}
                 </div>
@@ -484,7 +484,7 @@ export function AssetDetailView({
           <div className="space-y-4">
             {/* Composite score */}
             <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-              <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-3">Factor Score</p>
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-300 mb-3">Factor Score</p>
               <div className="flex items-end gap-3 mb-4">
                 <p className="text-4xl font-bold tabular-nums text-slate-100">{ranking.composite_score.toFixed(1)}</p>
                 <p className="text-slate-500 text-sm mb-1">/ 70</p>
@@ -498,7 +498,7 @@ export function AssetDetailView({
 
             {/* Signal details */}
             <div className="rounded-xl border border-slate-800 bg-slate-900 p-4 space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Signal Details</p>
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-300">Signal Details</p>
               {[
                 { label: "Confidence",  val: `${ranking.confidence}%`,  cls: "text-slate-200" },
                 { label: "Regime",      val: ranking.regime,            cls: REGIME_COLOR[ranking.regime] ?? "text-slate-400" },
@@ -507,15 +507,15 @@ export function AssetDetailView({
                 { label: "Snapshot",    val: ranking.snapshot_date,     cls: "text-slate-400" },
               ].map(({ label, val, cls }) => (
                 <div key={label} className="flex justify-between items-center">
-                  <span className="text-xs text-slate-500">{label}</span>
-                  <span className={`text-xs font-semibold ${cls}`}>{val}</span>
+                  <span className="text-sm text-slate-400">{label}</span>
+                  <span className={`text-sm font-semibold ${cls}`}>{val}</span>
                 </div>
               ))}
             </div>
 
             {/* Confidence bar */}
             <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-              <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-3">Signal Confidence</p>
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-300 mb-3">Signal Confidence</p>
               <div className="flex items-center gap-3">
                 <div className="flex-1 h-2 rounded-full bg-slate-800">
                   <div
@@ -529,7 +529,7 @@ export function AssetDetailView({
 
             {/* Why DECISION? */}
             <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-              <p className={`text-xs font-semibold uppercase tracking-widest mb-3 ${D_COLOR[ranking.decision].text}`}>
+              <p className={`text-sm font-semibold uppercase tracking-widest mb-3 ${D_COLOR[ranking.decision].text}`}>
                 Why {ranking.decision}?
               </p>
               <ul className="space-y-2">
@@ -550,7 +550,7 @@ export function AssetDetailView({
                     .sort((a, b) => b.weight - a.weight)
                     .slice(0, 3)
                     .map(({ text }) => (
-                      <li key={text} className="flex items-start gap-2 text-xs leading-relaxed text-slate-400">
+                      <li key={text} className="flex items-start gap-2 text-sm leading-relaxed text-slate-400">
                         <span className="mt-0.5 text-slate-600">•</span>
                         {text}
                       </li>
