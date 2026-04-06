@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -79,6 +79,95 @@ const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?:
     </div>
   );
 };
+
+interface TickerDetails {
+  name?: string;
+  sic_description?: string;
+  market_cap?: number;
+  total_employees?: number;
+  homepage_url?: string;
+  description?: string;
+}
+
+function fmtCap(v: number) {
+  if (v >= 1e12) return `$${(v / 1e12).toFixed(1)}T`;
+  if (v >= 1e9) return `$${(v / 1e9).toFixed(1)}B`;
+  if (v >= 1e6) return `$${(v / 1e6).toFixed(0)}M`;
+  return `$${v.toLocaleString()}`;
+}
+
+function fmtEmployees(v: number) {
+  if (v >= 1000) return `${(v / 1000).toFixed(1)}K`;
+  return v.toLocaleString();
+}
+
+function CompanyInfoCard({ ticker }: { ticker: string }) {
+  const [info, setInfo] = useState<TickerDetails | null>(null);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    const polyTicker = ticker.replace("-", ".");
+    const key = process.env.NEXT_PUBLIC_POLYGON_API_KEY;
+    if (!key) return;
+    fetch(`https://api.polygon.io/v3/reference/tickers/${polyTicker}?apiKey=${key}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d?.results) setInfo(d.results); })
+      .catch(() => {});
+  }, [ticker]);
+
+  if (!info) return null;
+
+  const fields: { label: string; value: string | JSX.Element }[] = [];
+  if (info.sic_description) fields.push({ label: "Industry", value: info.sic_description });
+  if (info.market_cap) fields.push({ label: "Market Cap", value: fmtCap(info.market_cap) });
+  if (info.total_employees) fields.push({ label: "Employees", value: fmtEmployees(info.total_employees) });
+  if (info.homepage_url) {
+    const display = info.homepage_url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+    fields.push({
+      label: "Website",
+      value: (
+        <a href={info.homepage_url} target="_blank" rel="noopener noreferrer" className="text-sky-400 hover:text-sky-300 transition-colors">
+          {display}
+        </a>
+      ),
+    });
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900 p-4 mb-6">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          {info.name && <h2 className="text-sm font-semibold text-slate-200 truncate">{info.name}</h2>}
+          {fields.length > 0 && (
+            <div className="flex flex-wrap gap-x-5 gap-y-1 mt-2">
+              {fields.map(({ label, value }) => (
+                <div key={label} className="flex items-center gap-1.5 text-xs">
+                  <span className="text-slate-500">{label}</span>
+                  <span className="text-slate-300">{value}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      {info.description && (
+        <div className="mt-3">
+          <p className={`text-xs leading-relaxed text-slate-400 ${expanded ? "" : "line-clamp-3"}`}>
+            {info.description}
+          </p>
+          {info.description.length > 200 && (
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="mt-1 text-[10px] text-slate-500 hover:text-slate-300 transition-colors"
+            >
+              {expanded ? "Show less" : "Show more"}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function AssetDetailView({
   ranking,
@@ -227,6 +316,8 @@ export function AssetDetailView({
             </p>
           </div>
         </div>
+
+        <CompanyInfoCard ticker={ranking.ticker} />
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Left: chart */}
