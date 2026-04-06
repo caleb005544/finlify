@@ -12,6 +12,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
+  ReferenceLine,
 } from "recharts";
 import type { Ranking, Decision } from "@/types/rankings";
 
@@ -133,6 +134,61 @@ export function AssetDetailView({
     return result;
   }, [prices, filteredPrices]);
 
+  // Forecast fan chart
+  const { combinedData, lastHistDate } = useMemo(() => {
+    if (!chartData.length || !lastClose) return { combinedData: chartData, lastHistDate: "" };
+
+    const driftDaily = ranking.momentum_score / 10000;
+    const dailyVol = Math.abs(ranking.risk_penalty) / 100 / Math.sqrt(252);
+    const z = 1.645; // 90% CI
+
+    const lastDate = new Date(filteredPrices[filteredPrices.length - 1]?.date ?? Date.now());
+    const lastDateStr = chartData[chartData.length - 1]?.date as string;
+
+    // Generate forecast points at day 10, 20, 30, 45, 60, 75, 90
+    const forecastDays = [10, 20, 30, 45, 60, 75, 90];
+    const forecastPoints = forecastDays.map((t) => {
+      const center = lastClose * (1 + driftDaily * t);
+      const spread = dailyVol * Math.sqrt(t) * z;
+      const futureDate = new Date(lastDate);
+      futureDate.setDate(futureDate.getDate() + t);
+      const dateStr = futureDate.toISOString().split("T")[0].slice(0, 10);
+      return {
+        date: dateStr,
+        close: null as number | null,
+        fanUpper: parseFloat((center * (1 + spread)).toFixed(2)),
+        fanLower: parseFloat((center * (1 - spread)).toFixed(2)),
+        fanCenter: parseFloat(center.toFixed(2)),
+        ma30: null, ma50: null, ma120: null,
+      };
+    });
+
+    // Bridge point: last historical point starts the fan
+    const bridge = {
+      ...chartData[chartData.length - 1],
+      fanUpper: lastClose,
+      fanLower: lastClose,
+      fanCenter: lastClose,
+    };
+
+    // Historical points get null fan values
+    const histWithFan = chartData.slice(0, -1).map((d) => ({
+      ...d,
+      fanUpper: null as number | null,
+      fanLower: null as number | null,
+      fanCenter: null as number | null,
+    }));
+
+    return {
+      combinedData: [...histWithFan, bridge, ...forecastPoints],
+      lastHistDate: lastDateStr,
+    };
+  }, [chartData, lastClose, ranking, filteredPrices]);
+
+  const fanColor = ranking.decision === "BUY" ? "#00c87a"
+    : ranking.decision === "AVOID" ? "#ff4d4d"
+    : "#f59e0b";
+
   return (
     <div style={{ background: "#0a0e1a", minHeight: "100vh", color: "#e2e8f0" }}>
       <div className="mx-auto max-w-7xl px-4 py-8">
@@ -218,11 +274,15 @@ export function AssetDetailView({
                 </div>
               </div>
               <ResponsiveContainer width="100%" height={280}>
-                <AreaChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                <AreaChart data={combinedData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor={chartColor} stopOpacity={0.3} />
                       <stop offset="95%" stopColor={chartColor} stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="fanGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={fanColor} stopOpacity={0.15} />
+                      <stop offset="100%" stopColor={fanColor} stopOpacity={0.03} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
@@ -265,8 +325,45 @@ export function AssetDetailView({
                       />
                     ) : null
                   )}
+                  {/* Forecast fan */}
+                  <Area
+                    type="monotone"
+                    dataKey="fanUpper"
+                    stroke="none"
+                    fill="url(#fanGrad)"
+                    dot={false}
+                    connectNulls={false}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="fanLower"
+                    stroke="none"
+                    fill="#0a0e1a"
+                    dot={false}
+                    connectNulls={false}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="fanCenter"
+                    stroke={fanColor}
+                    strokeWidth={1}
+                    strokeDasharray="6 4"
+                    dot={false}
+                    connectNulls={false}
+                  />
+                  {lastHistDate && (
+                    <ReferenceLine
+                      x={lastHistDate}
+                      stroke="#475569"
+                      strokeDasharray="3 3"
+                      strokeWidth={1}
+                    />
+                  )}
                 </AreaChart>
               </ResponsiveContainer>
+              <p className="mt-2 text-[10px] text-slate-600 text-right">
+                Based on historical volatility. Not a price target.
+              </p>
             </div>
 
             {/* OHLCV summary */}
