@@ -227,6 +227,32 @@ export function RankingsView({
           </table>
         </div>
       </div>
+
+      {/* How Scores Work */}
+      <div className="mt-4">
+        <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-slate-500">
+          How Scores Work
+        </h2>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {[
+            { icon: "📐", name: "Trend Score", range: "0–30", desc: "Measures price position relative to 20/50/200-day moving averages and 52-week range." },
+            { icon: "🚀", name: "Momentum Score", range: "0–40", desc: "Captures return strength across 1D, 20D, 60D, 120D, 252D timeframes." },
+            { icon: "⚠️", name: "Risk Penalty", range: "0 to −10", desc: "Penalizes high volatility and extended drawdown from 52-week high." },
+            { icon: "🎯", name: "Composite Score", range: "0–70", desc: "Weighted combination of Trend, Momentum, and Risk. Higher = stronger signal." },
+            { icon: "🌊", name: "Regime", range: "Label", desc: "Market condition (TRENDING / MIXED / RISK_OFF) derived from MA alignment and momentum." },
+            { icon: "🔒", name: "Confidence", range: "0–100", desc: "Signal reliability score based on internal consistency of factor scores." },
+          ].map(({ icon, name, range, desc }) => (
+            <div key={name} className="rounded-xl border border-slate-800/60 bg-slate-900/50 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-base">{icon}</span>
+                <span className="text-xs font-semibold text-slate-300">{name}</span>
+                <span className="ml-auto text-[10px] font-mono text-slate-600">{range}</span>
+              </div>
+              <p className="text-xs leading-relaxed text-slate-500">{desc}</p>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
