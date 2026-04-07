@@ -5,3 +5,5 @@ numpy
 pyarrow
 statsmodels
 python-dotenv
+psycopg2-binary
+supabase
