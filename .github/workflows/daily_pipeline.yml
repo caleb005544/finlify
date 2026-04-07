@@ -28,11 +28,11 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: "Step 1: Ingest daily prices from Polygon"
-        run: python -m src.ingestion.ingest_polygon
-
       - name: "Step 1b: Rebuild parquet from Supabase"
         run: python scripts/pull_from_supabase.py
+
+      - name: "Step 1: Ingest daily prices from Polygon"
+        run: python -m src.ingestion.ingest_polygon
 
       - name: "Steps 2-8: Run pipeline"
         run: python scripts/run_pipeline.py --from-step 2 --to-step 8
