@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
-import { Search } from "lucide-react";
 import type { Ranking, Decision } from "@/types/rankings";
 
 const D_COLOR: Record<Decision, { badge: string; text: string; bar: string }> = {
@@ -45,7 +44,10 @@ export function RankingsView({
 }) {
   const [filter, setFilter] = useState<Decision | "ALL">("ALL");
   const [assetFilter, setAssetFilter] = useState<"ALL" | "stock" | "etf">("ALL");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedTickers, setSelectedTickers] = useState<string[]>([]);
+  const [inputValue, setInputValue] = useState("");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Base set: filtered by asset type only (for KPI cards)
   const assetFiltered = assetFilter === "ALL" ? rankings : rankings.filter((r) => r.asset_type === assetFilter);
@@ -62,12 +64,28 @@ export function RankingsView({
   // Top BUY cards: respect asset filter
   const topBuys = assetFiltered.filter((r) => r.decision === "BUY").slice(0, 5);
 
-  // Full filter: decision + asset type + search
+  // Ticker dropdown candidates: all tickers not yet selected, matching inputValue
+  const tickerCandidates = rankings
+    .map((r) => r.ticker)
+    .filter((t) => !selectedTickers.includes(t) && t.toLowerCase().includes(inputValue.toLowerCase()));
+
+  const addTicker = (ticker: string) => {
+    setSelectedTickers((prev) => [...prev, ticker]);
+    setInputValue("");
+    setDropdownOpen(false);
+    inputRef.current?.focus();
+  };
+
+  const removeTicker = (ticker: string) => {
+    setSelectedTickers((prev) => prev.filter((t) => t !== ticker));
+  };
+
+  // Full filter: decision + asset type + selected tickers
   const filtered = rankings.filter((r) => {
     const matchesDecision = filter === "ALL" || r.decision === filter;
     const matchesAsset = assetFilter === "ALL" || r.asset_type === assetFilter;
-    const matchesSearch = r.ticker.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesDecision && matchesAsset && matchesSearch;
+    const matchesTicker = selectedTickers.length === 0 || selectedTickers.includes(r.ticker);
+    return matchesDecision && matchesAsset && matchesTicker;
   });
 
   return (
@@ -133,17 +151,40 @@ export function RankingsView({
         </div>
       )}
 
-      {/* Search bar + asset type filter */}
+      {/* Ticker multi-select + asset type filter */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-          <input
-            type="text"
-            placeholder="Search ticker..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full max-w-xs pl-9 pr-4 py-2 rounded-md border border-slate-700 bg-slate-900 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
-          />
+          <div className="flex flex-wrap items-center gap-1.5 min-w-[220px] max-w-xs px-2 py-1.5 rounded-md border border-slate-700 bg-slate-900 focus-within:ring-1 focus-within:ring-slate-500">
+            {selectedTickers.map((t) => (
+              <span key={t} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-700 text-xs font-medium text-slate-200">
+                {t}
+                <button onClick={() => removeTicker(t)} className="text-slate-400 hover:text-slate-100 leading-none">✕</button>
+              </span>
+            ))}
+            <input
+              ref={inputRef}
+              type="text"
+              placeholder={selectedTickers.length === 0 ? "Filter tickers..." : ""}
+              value={inputValue}
+              onChange={(e) => { setInputValue(e.target.value); setDropdownOpen(true); }}
+              onFocus={() => setDropdownOpen(true)}
+              onBlur={() => setTimeout(() => setDropdownOpen(false), 150)}
+              className="flex-1 min-w-[80px] bg-transparent text-sm text-slate-200 placeholder-slate-500 focus:outline-none"
+            />
+          </div>
+          {dropdownOpen && tickerCandidates.length > 0 && (
+            <ul className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto rounded-md border border-slate-700 bg-slate-900 shadow-lg">
+              {tickerCandidates.slice(0, 20).map((t) => (
+                <li
+                  key={t}
+                  onMouseDown={() => addTicker(t)}
+                  className="px-3 py-1.5 text-sm text-slate-200 cursor-pointer hover:bg-slate-800"
+                >
+                  {t}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
         <div className="flex rounded-lg border border-slate-700 overflow-hidden">
           {([
@@ -184,7 +225,7 @@ export function RankingsView({
             </button>
           )}
         </div>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto overflow-y-auto max-h-[600px]">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-800">
