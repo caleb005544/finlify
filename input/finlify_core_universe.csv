@@ -1,94 +1,111 @@
-symbol,asset_type,source
-AAPL,stock,sp500_core
-ABBV,stock,sp500_core
-ABT,stock,sp500_core
-ACN,stock,sp500_core
-ADBE,stock,sp500_core
-AGG,etf,etf_core
-AMD,stock,sp500_core
-AMZN,stock,sp500_core
-ARKB,etf,etf_core
-AVGO,stock,sp500_core
-BND,etf,etf_core
-BRK-B,stock,sp500_core
-CAT,stock,sp500_core
-COST,stock,sp500_core
-CRM,stock,sp500_core
-CSCO,stock,sp500_core
-DBC,etf,etf_core
-DGRO,etf,etf_core
-DHR,stock,sp500_core
-DIA,etf,etf_core
-DIS,stock,sp500_core
-FBTC,etf,etf_core
-GE,stock,sp500_core
-GLD,etf,etf_core
-GOOG,stock,sp500_core
-GOOGL,stock,sp500_core
-HD,stock,sp500_core
-HDV,etf,etf_core
-HON,stock,sp500_core
-HYG,etf,etf_core
-IBIT,etf,etf_core
-IBM,stock,sp500_core
-IEF,etf,etf_core
-INTC,stock,sp500_core
-IVV,etf,etf_core
-IWM,etf,etf_core
-JPM,stock,sp500_core
-KO,stock,sp500_core
-LIN,stock,sp500_core
-LLY,stock,sp500_core
-LOW,stock,sp500_core
-LQD,etf,etf_core
-MA,stock,sp500_core
-MCD,stock,sp500_core
-META,stock,sp500_core
-MRK,stock,sp500_core
-MSFT,stock,sp500_core
-MTUM,etf,etf_core
-NEE,stock,sp500_core
-NFLX,stock,sp500_core
-NVDA,stock,sp500_core
-ORCL,stock,sp500_core
-PEP,stock,sp500_core
-PG,stock,sp500_core
-PM,stock,sp500_core
-QCOM,stock,sp500_core
-QQQ,etf,etf_core
-QUAL,etf,etf_core
-RTX,stock,sp500_core
-SCHD,etf,etf_core
-SHY,etf,etf_core
-SIZE,etf,etf_core
-SLV,etf,etf_core
-SPGI,stock,sp500_core
-SPY,etf,etf_core
-TLT,etf,etf_core
-TMO,stock,sp500_core
-TSLA,stock,sp500_core
-TXN,stock,sp500_core
-UNH,stock,sp500_core
-USMV,etf,etf_core
-USO,etf,etf_core
-V,stock,sp500_core
-VLUE,etf,etf_core
-VOO,etf,etf_core
-VTI,etf,etf_core
-VYM,etf,etf_core
-WMT,stock,sp500_core
-XLB,etf,etf_core
-XLC,etf,etf_core
-XLE,etf,etf_core
-XLF,etf,etf_core
-XLI,etf,etf_core
-XLK,etf,etf_core
-XLP,etf,etf_core
-XLRE,etf,etf_core
-XLU,etf,etf_core
-XLV,etf,etf_core
-XLY,etf,etf_core
-XOM,stock,sp500_core
-JOBY,stock,manual_add
-NBIS,stock,manual_add
-PLTR,stock,manual_add
+symbol,asset_type,source,sector
+AAPL,stock,sp500_core,Information Technology
+ABBV,stock,sp500_core,Healthcare
+ABT,stock,sp500_core,Healthcare
+ACN,stock,sp500_core,Information Technology
+ADBE,stock,sp500_core,Information Technology
+AGG,etf,etf_core,Treasury ETF
+AMD,stock,sp500_core,Information Technology
+AMZN,stock,sp500_core,Information Technology
+ARKB,etf,etf_core,Crypto ETF
+AVGO,stock,sp500_core,Information Technology
+BND,etf,etf_core,Treasury ETF
+BRK-B,stock,sp500_core,Financials
+CAT,stock,sp500_core,Industrials
+COST,stock,sp500_core,Consumer Staples
+CRM,stock,sp500_core,Information Technology
+CSCO,stock,sp500_core,Information Technology
+DBC,etf,etf_core,Commodities ETF
+DGRO,etf,etf_core,Dividend ETF
+DHR,stock,sp500_core,Healthcare
+DIA,etf,etf_core,Broad Market ETF
+DIS,stock,sp500_core,Communication Services
+FBTC,etf,etf_core,Crypto ETF
+GE,stock,sp500_core,Industrials
+GLD,etf,etf_core,Precious Metals ETF
+GOOG,stock,sp500_core,Communication Services
+GOOGL,stock,sp500_core,Communication Services
+HD,stock,sp500_core,Consumer Discretionary
+HDV,etf,etf_core,Dividend ETF
+HON,stock,sp500_core,Industrials
+HYG,etf,etf_core,High Yield ETF
+IBIT,etf,etf_core,Crypto ETF
+IBM,stock,sp500_core,Information Technology
+IEF,etf,etf_core,Treasury ETF
+INTC,stock,sp500_core,Information Technology
+IVV,etf,etf_core,Broad Market ETF
+IWM,etf,etf_core,Broad Market ETF
+JPM,stock,sp500_core,Financials
+KO,stock,sp500_core,Consumer Staples
+LIN,stock,sp500_core,Materials
+LLY,stock,sp500_core,Healthcare
+LOW,stock,sp500_core,Consumer Discretionary
+LQD,etf,etf_core,Corporate Bond ETF
+MA,stock,sp500_core,Financials
+MCD,stock,sp500_core,Consumer Discretionary
+META,stock,sp500_core,Communication Services
+MRK,stock,sp500_core,Healthcare
+MSFT,stock,sp500_core,Information Technology
+MTUM,etf,etf_core,Factor ETF
+NEE,stock,sp500_core,Utilities
+NFLX,stock,sp500_core,Communication Services
+NVDA,stock,sp500_core,Information Technology
+ORCL,stock,sp500_core,Information Technology
+PEP,stock,sp500_core,Consumer Staples
+PG,stock,sp500_core,Consumer Staples
+PM,stock,sp500_core,Consumer Staples
+QCOM,stock,sp500_core,Information Technology
+QQQ,etf,etf_core,Broad Market ETF
+QUAL,etf,etf_core,Factor ETF
+RTX,stock,sp500_core,Industrials
+SCHD,etf,etf_core,Dividend ETF
+SHY,etf,etf_core,Treasury ETF
+SIZE,etf,etf_core,Factor ETF
+SLV,etf,etf_core,Precious Metals ETF
+SPGI,stock,sp500_core,Financials
+SPY,etf,etf_core,Broad Market ETF
+TLT,etf,etf_core,Treasury ETF
+TMO,stock,sp500_core,Healthcare
+TSLA,stock,sp500_core,Energy & Clean Tech
+TXN,stock,sp500_core,Information Technology
+UNH,stock,sp500_core,Healthcare
+USMV,etf,etf_core,Factor ETF
+USO,etf,etf_core,Commodities ETF
+V,stock,sp500_core,Financials
+VLUE,etf,etf_core,Factor ETF
+VOO,etf,etf_core,Broad Market ETF
+VTI,etf,etf_core,Broad Market ETF
+VYM,etf,etf_core,Dividend ETF
+WMT,stock,sp500_core,Consumer Staples
+XLB,etf,etf_core,Sector ETF
+XLC,etf,etf_core,Sector ETF
+XLE,etf,etf_core,Sector ETF
+XLF,etf,etf_core,Sector ETF
+XLI,etf,etf_core,Sector ETF
+XLK,etf,etf_core,Sector ETF
+XLP,etf,etf_core,Sector ETF
+XLRE,etf,etf_core,Sector ETF
+XLU,etf,etf_core,Sector ETF
+XLV,etf,etf_core,Sector ETF
+XLY,etf,etf_core,Sector ETF
+XOM,stock,sp500_core,Energy & Clean Tech
+JOBY,stock,manual_add,Industrials
+NBIS,stock,manual_add,Healthcare
+PLTR,stock,manual_add,Information Technology
+CVX,stock,sp500_core,Energy & Clean Tech
+COP,stock,sp500_core,Energy & Clean Tech
+SLB,stock,sp500_core,Energy & Clean Tech
+DUK,stock,sp500_core,Utilities
+SO,stock,sp500_core,Utilities
+CMCSA,stock,sp500_core,Communication Services
+BAC,stock,sp500_core,Financials
+WFC,stock,sp500_core,Financials
+GS,stock,sp500_core,Financials
+MS,stock,sp500_core,Financials
+BLK,stock,sp500_core,Financials
+AXP,stock,sp500_core,Financials
+NKE,stock,sp500_core,Consumer Discretionary
+SBUX,stock,sp500_core,Consumer Discretionary
+TGT,stock,sp500_core,Consumer Discretionary
+AMT,stock,sp500_core,Real Estate
+PLD,stock,sp500_core,Real Estate
