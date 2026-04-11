@@ -19,6 +19,7 @@ load_dotenv()
 DEFAULT_INPUT_PARQUET = Path("data/mart/investment/factor_snapshot_latest.parquet")
 DEFAULT_OUTPUT_PARQUET = Path("data/mart/investment/top_ranked_assets.parquet")
 DEFAULT_OUTPUT_CSV = Path("data/mart/investment/top_ranked_assets.csv")
+UNIVERSE_CSV = Path("input/finlify_core_universe.csv")
 ALLOWED_DECISIONS = {"BUY", "HOLD", "WATCH", "AVOID"}
 ALLOWED_REGIMES = {"TRENDING", "MIXED", "RISK_OFF"}
 ALLOWED_RISK_LEVELS = {"LOW", "MEDIUM", "HIGH"}
@@ -332,6 +333,7 @@ def build_rankings(snapshot_df: pd.DataFrame) -> pd.DataFrame:
         "source_ticker",
         "ticker",
         "asset_type",
+        "sector",
         "date",
         "close",
         "trend_score",
@@ -357,6 +359,8 @@ def build_rankings(snapshot_df: pd.DataFrame) -> pd.DataFrame:
         "risk_level",
         "horizon_days",
     ]
+    if "sector" not in ranked.columns:
+        ranked["sector"] = None
     ranked = ranked[out_cols].sort_values(["rank_overall", "ticker"], kind="mergesort").reset_index(drop=True)
     _validate_output(ranked, input_rows=len(snapshot_df))
     return ranked
@@ -373,6 +377,7 @@ def _upsert_rankings_to_supabase(ranked_df: pd.DataFrame) -> None:
             "source_ticker": ranked_df["source_ticker"],
             "ticker": ranked_df["ticker"],
             "asset_type": ranked_df["asset_type"],
+            "sector": ranked_df["sector"],
             "snapshot_date": ranked_df["date"],
             "composite_score": ranked_df["composite_score"],
             "trend_score": ranked_df["trend_score"],
@@ -389,13 +394,14 @@ def _upsert_rankings_to_supabase(ranked_df: pd.DataFrame) -> None:
 
     sql = """
         INSERT INTO rankings
-            (source_ticker, ticker, asset_type, snapshot_date, composite_score,
+            (source_ticker, ticker, asset_type, sector, snapshot_date, composite_score,
              trend_score, momentum_score, risk_penalty, decision, rank_overall,
              confidence, regime, risk_level, horizon_days)
         VALUES %s
         ON CONFLICT (source_ticker, snapshot_date) DO UPDATE SET
             ticker = EXCLUDED.ticker,
             asset_type = EXCLUDED.asset_type,
+            sector = EXCLUDED.sector,
             composite_score = EXCLUDED.composite_score,
             trend_score = EXCLUDED.trend_score,
             momentum_score = EXCLUDED.momentum_score,
@@ -425,6 +431,11 @@ def main() -> None:
         raise FileNotFoundError(f"Input parquet not found: {args.input_parquet}")
 
     snapshot = pd.read_parquet(args.input_parquet)
+
+    # Join sector from universe CSV
+    universe = pd.read_csv(UNIVERSE_CSV, usecols=["symbol", "sector"])
+    snapshot = snapshot.merge(universe.rename(columns={"symbol": "ticker"}), on="ticker", how="left")
+
     ranked = build_rankings(snapshot)
 
     args.output_parquet.parent.mkdir(parents=True, exist_ok=True)
