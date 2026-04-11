@@ -12,9 +12,16 @@ async function getRankings(): Promise<Ranking[]> {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
+  const { data: latestSnapshot } = await supabase
+    .from("rankings")
+    .select("snapshot_date")
+    .order("snapshot_date", { ascending: false })
+    .limit(1)
+    .single();
   const { data, error } = await supabase
     .from("rankings")
     .select("*")
+    .eq("snapshot_date", latestSnapshot?.snapshot_date)
     .order("rank_overall", { ascending: true });
   if (error) throw new Error(error.message);
   return (data ?? []) as Ranking[];
