@@ -1,101 +1,107 @@
 # Finlify
 
-Finlify is a local, file-based investment analytics pipeline with a Streamlit front end.
+Finlify is a quantitative asset ranking platform that runs a daily factor-scoring pipeline and serves the results through a Next.js web app. It covers ~90 stocks and ETFs, updated automatically each trading day after NYSE close.
 
-Current architecture:
+**Live Demo:** https://finlify.vercel.app
 
-`input TXT -> raw parquet -> staging parquet -> mart parquet -> visualization CSV -> Streamlit`
+---
 
-The repository does not currently run on a database, dbt project, or Airflow-style scheduler. The active implementation is Python-script driven and orchestrated by [`scripts/run_pipeline.py`](/Users/caleb/Projects/finlify/scripts/run_pipeline.py).
+## Tech Stack
 
-## What The Project Does
+| Layer | Technology |
+|-------|-----------|
+| Frontend | Next.js (App Router), TypeScript, Tailwind CSS, ShadCN UI, Recharts |
+| Database | Supabase (PostgreSQL) |
+| Pipeline | Python, GitHub Actions (daily cron, weekdays 23:00 UTC) |
+| Data Source | Polygon.io Grouped Daily API |
+| Deployment | Vercel |
 
-- Ingests local Stooq TXT price files
-- Builds normalized raw and staging datasets
-- Computes factor-style price features for the Finlify core universe
-- Produces latest rankings and offline forecast exports
-- Serves the outputs through a Streamlit dashboard
+---
 
-## Main Entrypoints
+## Architecture
 
-- App: [`app/finlify_streamlit_mvp_app.py`](/Users/caleb/Projects/finlify/app/finlify_streamlit_mvp_app.py)
-- Orchestration: [`scripts/run_pipeline.py`](/Users/caleb/Projects/finlify/scripts/run_pipeline.py)
+```
+Polygon.io API
+      |
+      v
+ingest_polygon.py          (Step 1 — daily incremental ingest)
+      |
+      v
+stock_prices.parquet  -->  Supabase (PostgreSQL)
+      |                          |
+      v                          v
+Pipeline Steps 2-8         Next.js App (Vercel)
+  - build_ticker_master         |
+  - build_latest_snapshot       +--> /               Market Overview
+  - build_price_features        +--> /asset/[ticker]  Asset Detail
+  - build_factor_snapshot
+  - build_rankings
+  - build_signal_heatmap_snapshot
+  - build_visualization_exports
+      |
+      v
+  top_ranked_assets  -->  Supabase (rankings table)
+```
 
-## Core Pipeline Steps
+---
 
-1. `src/ingestion/initial_ingest.py`
-   - TXT -> `data/raw/stock_price_stooq/stock_prices.parquet`
-2. `src/transform/build_ticker_master.py`
-   - raw -> `data/staging/stock_price_stooq/ticker_master.parquet`
-3. `src/transform/build_latest_snapshot.py`
-   - raw + ticker master -> `data/staging/stock_price_stooq/latest_snapshot.parquet`
-4. `src/features/build_price_features.py`
-   - raw + universe config -> `data/mart/investment/factor_features.parquet`
-5. `src/ranking/build_factor_snapshot_latest.py`
-   - factor features -> `data/mart/investment/factor_snapshot_latest.parquet`
-6. `src/ranking/build_rankings.py`
-   - latest factor snapshot -> `data/mart/investment/top_ranked_assets.parquet`
-7. `src/visualization/build_visualization_exports.py`
-   - mart -> `data/visualization/investment/*.csv`
-8. `src/features/build_sarimax_forecast.py`
-   - factor features -> `data/visualization/investment/asset_forecast_for_streamlit.csv`
+## Features
 
-## Run Locally
+- **Market Overview** — full universe ranked by composite factor score with BUY / HOLD / WATCH / AVOID signals
+- **Stock / ETF filter** — cross-filter KPI cards and Top Opportunities panel
+- **Asset Detail page** — interactive price chart with MA30 / MA50 / MA120 lines and statistical fan chart forecast bands
+- **Company info card** — name, sector, description via Polygon Ticker Details v3
+- **Rule-based decision explanation** — plain-English rationale for each BUY / WATCH / AVOID signal
 
-Install dependencies:
+---
+
+## Local Development
+
+### Prerequisites
+
+- Python 3.11+
+- Node.js 18+
+- A `.env.local` file in `app/` with `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+
+### Backend pipeline
 
 ```bash
 pip install -r requirements.txt
-```
 
-Run the full pipeline:
-
-```bash
+# Full pipeline (steps 1-8)
 python scripts/run_pipeline.py
-```
 
-Dry run:
+# Subset of steps
+python scripts/run_pipeline.py --from-step 2 --to-step 6
 
-```bash
+# Dry run
 python scripts/run_pipeline.py --dry-run
+
+# Ingest today's prices only
+python -m src.ingestion.ingest_polygon
 ```
 
-Run a subset of steps:
+### Frontend
 
 ```bash
-python scripts/run_pipeline.py --from-step 4 --to-step 8
+cd app
+npm install
+npm run dev
 ```
 
-Run the app:
+---
 
-```bash
-streamlit run app/finlify_streamlit_mvp_app.py
-```
+## Pipeline Steps
 
-## Pipeline Run Outputs
+| Step | Script | Output |
+|------|--------|--------|
+| 1 | `src/ingestion/ingest_polygon.py` | `data/raw/.../stock_prices.parquet` + Supabase |
+| 2 | `src/transform/build_ticker_master.py` | `data/staging/.../ticker_master.parquet` |
+| 3 | `src/transform/build_latest_snapshot.py` | `data/staging/.../latest_snapshot.parquet` |
+| 4 | `src/features/build_price_features.py` | `data/mart/.../factor_features.parquet` |
+| 5 | `src/ranking/build_factor_snapshot_latest.py` | `data/mart/.../factor_snapshot_latest.parquet` |
+| 6 | `src/ranking/build_rankings.py` | `data/mart/.../top_ranked_assets.parquet` + Supabase |
+| 7 | `src/visualization/build_signal_heatmap_snapshot.py` | `data/visualization/.../signal_heatmap_snapshot.csv` |
+| 8 | `src/visualization/build_visualization_exports.py` | `data/visualization/.../*.csv` |
 
-Each orchestration run writes:
-
-- `output/pipeline_runs/<run_id>/summary.json`
-- `output/pipeline_runs/<run_id>/step_<n>_<name>.log`
-
-These files provide step status, durations, output checks, and captured stdout/stderr.
-
-## Key Data Folders
-
-- `data/raw/`
-- `data/staging/`
-- `data/mart/`
-- `data/visualization/`
-- `output/pipeline_runs/`
-
-## Current Documentation
-
-- [`docs/data_pipeline_status.md`](/Users/caleb/Projects/finlify/docs/data_pipeline_status.md)
-- [`docs/pipeline_runbook.md`](/Users/caleb/Projects/finlify/docs/pipeline_runbook.md)
-- [`docs/current_gaps_and_next_steps.md`](/Users/caleb/Projects/finlify/docs/current_gaps_and_next_steps.md)
-- [`docs/folder_structure.md`](/Users/caleb/Projects/finlify/docs/folder_structure.md)
-
-## Current Caveat
-
-The Streamlit app currently reads `data/mart/investment/top_ranked_assets.csv`, while the orchestration wrapper refreshes `data/mart/investment/top_ranked_assets.parquet` by default in step 6. A CSV mirror exists in the repo, but it is not refreshed automatically by the current wrapper unless `build_rankings.py` is run with `--output-csv`.
+Each run writes logs and a `summary.json` to `output/pipeline_runs/<run_id>/`.
