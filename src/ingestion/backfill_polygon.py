@@ -1,14 +1,24 @@
 """
-One-time backfill: fill gap between existing raw parquet (latest ~2026-03-05)
-and 2026-04-02 using Polygon.io API via fetch_polygon.fetch_ticker_range().
+Backfill: fetch historical price data for a date range via Polygon.io API.
 
 Writes new rows into the same raw schema used by initial_ingest.py:
   source_system, ingestion_run_id, ingested_at, symbol_raw, payload_date,
   open_raw, high_raw, low_raw, close_raw, volume_raw
+
+Usage examples:
+  # Backfill new tickers only (auto-detect start from parquet max_date + 1)
+  python -m src.ingestion.backfill_polygon --tickers JOBY,NBIS,PLTR
+
+  # Backfill with explicit date range
+  python -m src.ingestion.backfill_polygon --tickers PLTR --since 2024-04-04 --end 2026-04-10
+
+  # Backfill full universe up to yesterday
+  python -m src.ingestion.backfill_polygon
 """
 
 from __future__ import annotations
 
+import argparse
 import os
 import shutil
 import tempfile
@@ -18,8 +28,10 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
+import psycopg2
 import pyarrow as pa
 import pyarrow.parquet as pq
+from psycopg2.extras import execute_values
 
 from src.ingestion.fetch_polygon import fetch_ticker_range
 
@@ -28,7 +40,6 @@ from src.ingestion.fetch_polygon import fetch_ticker_range
 # ---------------------------------------------------------------------------
 UNIVERSE_CSV = Path("input/finlify_core_universe.csv")
 PARQUET_PATH = Path("data/raw/stock_price_stooq/stock_prices.parquet")
-BACKFILL_END = date(2026, 4, 2)
 RATE_LIMIT_SECONDS = 12
 SOURCE_SYSTEM = "polygon_backfill"
 
@@ -77,17 +88,71 @@ def _polygon_to_raw_schema(
     return raw
 
 
+def _upsert_to_supabase(raw_df: pd.DataFrame) -> int | None:
+    """Upsert raw_df rows into Supabase stock_prices. Returns inserted count or None if skipped."""
+    db_url = os.environ.get("SUPABASE_DB_URL")
+    if not db_url:
+        print("  WARNING: SUPABASE_DB_URL not set — skipping Supabase upsert")
+        return None
+
+    out = pd.DataFrame(
+        {
+            "source_ticker": raw_df["symbol_raw"],
+            "ticker": raw_df["symbol_raw"].str.replace(r"\.\w+$", "", regex=True),
+            "date": raw_df["payload_date"],
+            "open": raw_df["open_raw"],
+            "high": raw_df["high_raw"],
+            "low": raw_df["low_raw"],
+            "close": raw_df["close_raw"],
+            "volume": raw_df["volume_raw"],
+            "source_system": raw_df["source_system"],
+            "ingested_at": raw_df["ingested_at"],
+        }
+    )
+
+    sql = """
+        INSERT INTO stock_prices
+            (source_ticker, ticker, date, open, high, low, close, volume, source_system, ingested_at)
+        VALUES %s
+        ON CONFLICT (source_ticker, date) DO NOTHING
+    """
+    conn = psycopg2.connect(db_url)
+    try:
+        rows = list(out.itertuples(index=False, name=None))
+        with conn.cursor() as cur:
+            execute_values(cur, sql, rows, page_size=1000)
+            inserted = cur.rowcount
+        conn.commit()
+    finally:
+        conn.close()
+
+    return inserted
+
+
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Backfill Polygon.io price data into raw parquet + Supabase")
+    parser.add_argument("--tickers", type=str, default=None, help="Comma-separated tickers to backfill (default: full universe)")
+    parser.add_argument("--since", type=str, default=None, help="Start date YYYY-MM-DD (default: parquet max_date + 1 per ticker)")
+    parser.add_argument("--end", type=str, default=None, help="End date YYYY-MM-DD (default: yesterday)")
+    args = parser.parse_args()
+
+    end_date = date.fromisoformat(args.end) if args.end else date.today() - timedelta(days=1)
+    since_date = date.fromisoformat(args.since) if args.since else None
+
     run_id = _build_run_id()
     ingested_at = datetime.now(timezone.utc)
 
     print(f"Backfill run: {run_id}")
-    print(f"Target end date: {BACKFILL_END}")
+    print(f"Target end date: {end_date}")
     print()
 
-    # 1. Load universe
-    tickers = _load_universe()
-    print(f"Universe: {len(tickers)} tickers from {UNIVERSE_CSV}")
+    # 1. Load universe / ticker list
+    if args.tickers:
+        tickers = sorted(set(t.strip().upper() for t in args.tickers.split(",")))
+        print(f"Tickers (from --tickers): {', '.join(tickers)}")
+    else:
+        tickers = _load_universe()
+        print(f"Universe: {len(tickers)} tickers from {UNIVERSE_CSV}")
 
     # 2. Read existing max dates (symbol_raw has .US suffix)
     print("Reading existing parquet max dates...")
@@ -106,17 +171,20 @@ def main() -> None:
         symbol_raw = f"{ticker}.US"
         existing_max = max_dates.get(symbol_raw)
 
-        if existing_max and existing_max >= BACKFILL_END:
+        if existing_max and existing_max >= end_date:
             print(f"[{i:>3}/{total}] {ticker} — already up to date ({existing_max}), skipping")
             continue
 
-        start = (existing_max + timedelta(days=1)) if existing_max else date(2020, 1, 1)
-        print(f"[{i:>3}/{total}] {ticker} — fetching {start} to {BACKFILL_END}...")
+        if since_date:
+            start = since_date
+        else:
+            start = (existing_max + timedelta(days=1)) if existing_max else date(2020, 1, 1)
+        print(f"[{i:>3}/{total}] {ticker} — fetching {start} to {end_date}...")
 
         try:
             # Polygon uses dots not hyphens for share classes (BRK.B not BRK-B)
             poly_ticker = ticker.replace("-", ".")
-            df = fetch_ticker_range(poly_ticker, start, BACKFILL_END)
+            df = fetch_ticker_range(poly_ticker, start, end_date)
 
             # Normalize date: strip time component, cast to datetime64[ns]
             if not df.empty:
@@ -213,7 +281,13 @@ def main() -> None:
     finally:
         Path(tmp_path).unlink(missing_ok=True)
 
-    # 6. Verify
+    # 6. Upsert to Supabase
+    print("Upserting to Supabase...")
+    sb_inserted = _upsert_to_supabase(new_df)
+    if sb_inserted is not None:
+        print(f"  Supabase: {sb_inserted} inserted, {len(new_df) - sb_inserted} skipped (already existed)")
+
+    # 7. Verify
     final_pf = pq.ParquetFile(PARQUET_PATH)
     final_row_count = final_pf.metadata.num_rows
 
@@ -222,6 +296,7 @@ def main() -> None:
     print("BACKFILL SUMMARY")
     print("=" * 60)
     print(f"  Run ID:              {run_id}")
+    print(f"  End date:            {end_date}")
     print(f"  Tickers processed:   {total}")
     print(f"  Rows appended:       {len(new_df):,}")
     print(f"  Old parquet rows:    {old_row_count:,}")
