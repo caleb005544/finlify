@@ -89,3 +89,6 @@ XLU,etf,etf_core
 XLV,etf,etf_core
 XLY,etf,etf_core
 XOM,stock,sp500_core
+JOBY,stock,manual_add
+NBIS,stock,manual_add
+PLTR,stock,manual_add
