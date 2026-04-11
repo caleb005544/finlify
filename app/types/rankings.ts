@@ -18,4 +18,5 @@ export interface Ranking {
   regime: Regime
   risk_level: RiskLevel
   horizon_days: number
+  sector?: string
 }

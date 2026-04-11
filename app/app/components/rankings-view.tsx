@@ -44,24 +44,36 @@ export function RankingsView({
 }) {
   const [filter, setFilter] = useState<Decision | "ALL">("ALL");
   const [assetFilter, setAssetFilter] = useState<"ALL" | "stock" | "etf">("ALL");
+  const [sectorFilter, setSectorFilter] = useState("ALL");
   const [selectedTickers, setSelectedTickers] = useState<string[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Base set: filtered by asset type only (for KPI cards)
-  const assetFiltered = assetFilter === "ALL" ? rankings : rankings.filter((r) => r.asset_type === assetFilter);
+  // Sector list derived from rankings data
+  const sectors = ["ALL", ...Array.from(new Set(rankings.map((r) => r.sector).filter(Boolean))).sort()] as string[];
 
-  // Dynamic counts based on asset filter
+  // Base set: filtered by asset type + sector (for KPI cards)
+  const assetFiltered = rankings.filter((r) => {
+    const matchesAsset = assetFilter === "ALL" || r.asset_type === assetFilter;
+    const matchesSector = sectorFilter === "ALL" || r.sector === sectorFilter;
+    return matchesAsset && matchesSector;
+  });
+
+  // Dynamic counts based on asset + sector filter
   const dynamicCounts = { BUY: 0, HOLD: 0, WATCH: 0, AVOID: 0 };
   for (const r of assetFiltered) dynamicCounts[r.decision as Decision]++;
 
-  // Asset type counts (reflect decision filter)
-  const decisionFiltered = filter === "ALL" ? rankings : rankings.filter((r) => r.decision === filter);
+  // Asset type counts (reflect decision + sector filter)
+  const decisionFiltered = rankings.filter((r) => {
+    const matchesDecision = filter === "ALL" || r.decision === filter;
+    const matchesSector = sectorFilter === "ALL" || r.sector === sectorFilter;
+    return matchesDecision && matchesSector;
+  });
   const stockCount = decisionFiltered.filter((r) => r.asset_type === "stock").length;
   const etfCount = decisionFiltered.filter((r) => r.asset_type === "etf").length;
 
-  // Top BUY cards: respect asset filter
+  // Top BUY cards: respect asset + sector filter
   const topBuys = assetFiltered.filter((r) => r.decision === "BUY").slice(0, 5);
 
   // Ticker dropdown candidates: all tickers not yet selected, matching inputValue
@@ -80,12 +92,13 @@ export function RankingsView({
     setSelectedTickers((prev) => prev.filter((t) => t !== ticker));
   };
 
-  // Full filter: decision + asset type + selected tickers
+  // Full filter: decision + asset type + sector + selected tickers
   const filtered = rankings.filter((r) => {
     const matchesDecision = filter === "ALL" || r.decision === filter;
     const matchesAsset = assetFilter === "ALL" || r.asset_type === assetFilter;
+    const matchesSector = sectorFilter === "ALL" || r.sector === sectorFilter;
     const matchesTicker = selectedTickers.length === 0 || selectedTickers.includes(r.ticker);
-    return matchesDecision && matchesAsset && matchesTicker;
+    return matchesDecision && matchesAsset && matchesSector && matchesTicker;
   });
 
   return (
@@ -208,6 +221,23 @@ export function RankingsView({
         <span className="text-sm text-slate-500">
           {filtered.length} / {rankings.length} tickers
         </span>
+      </div>
+
+      {/* Sector filter */}
+      <div className="flex flex-wrap gap-1.5">
+        {sectors.map((sector) => (
+          <button
+            key={sector}
+            onClick={() => setSectorFilter(sectorFilter === sector ? "ALL" : sector)}
+            className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
+              sectorFilter === sector
+                ? "bg-slate-200 text-slate-900"
+                : "bg-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-700"
+            }`}
+          >
+            {sector}
+          </button>
+        ))}
       </div>
 
       {/* Rankings table */}
