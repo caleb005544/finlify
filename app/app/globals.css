@@ -49,35 +49,35 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --background: #f5f4f0;
+  --foreground: #1a1a1a;
+  --card: #ffffff;
+  --card-foreground: #1a1a1a;
+  --popover: #ffffff;
+  --popover-foreground: #1a1a1a;
+  --primary: #1a1a1a;
+  --primary-foreground: #f5f4f0;
+  --secondary: #f0efeb;
+  --secondary-foreground: #1a1a1a;
+  --muted: #f0efeb;
+  --muted-foreground: #666666;
+  --accent: #f0efeb;
+  --accent-foreground: #1a1a1a;
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --border: rgba(0,0,0,0.09);
+  --input: rgba(0,0,0,0.09);
+  --ring: rgba(0,0,0,0.2);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
-  --fin-green: #00c87a;
-  --fin-red: #ff4d4d;
-  --fin-amber: #f5a623;
-  --fin-blue: #3b9eff;
-  --fin-muted: #8b8fa8;
+  --fin-green: #2d7a52;
+  --fin-red: #b83030;
+  --fin-amber: #b86e10;
+  --fin-blue: #1a5ca8;
+  --fin-muted: #666666;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -128,28 +128,12 @@
   }
   body {
     @apply bg-background text-foreground;
-    background: #0a0e1a;
-    color: #e2e8f0;
   }
   html {
     @apply font-sans;
   }
 }
 
-.dark-dashboard {
-  background: #0a0e1a;
-  color: #e2e8f0;
-}
-
-:root {
-  --font-body: var(--font-inter);
-  --font-display: var(--font-dm-sans);
-}
-
-body {
-  font-family: var(--font-body), sans-serif;
-}
-
-h1, h2, h3, h4 {
-  font-family: var(--font-display), sans-serif;
+body, h1, h2, h3, h4 {
+  font-family: var(--font-nunito), 'Nunito', sans-serif;
 }

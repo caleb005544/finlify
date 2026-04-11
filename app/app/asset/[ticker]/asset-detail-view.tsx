@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, type ReactNode } from "react";
+import { useState, useMemo, useEffect, type ReactNode, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -16,23 +16,28 @@ import {
 } from "recharts";
 import type { Ranking, Decision } from "@/types/rankings";
 
-const D_COLOR: Record<Decision, { badge: string; text: string }> = {
-  BUY:   { badge: "bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30", text: "text-emerald-400" },
-  HOLD:  { badge: "bg-sky-500/15 text-sky-400 ring-1 ring-sky-500/30",             text: "text-sky-400"    },
-  WATCH: { badge: "bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/30",       text: "text-amber-400" },
-  AVOID: { badge: "bg-red-500/15 text-red-400 ring-1 ring-red-500/30",             text: "text-red-400"   },
+const DECISION_STYLE: Record<Decision, { bg: string; color: string; textColor: string }> = {
+  BUY:   { bg: "#e4f2eb", color: "#1a6e3e", textColor: "#2d7a52" },
+  HOLD:  { bg: "#e4edf9", color: "#1a4a8a", textColor: "#1a5ca8" },
+  WATCH: { bg: "#fef0e0", color: "#9a5c0a", textColor: "#b86e10" },
+  AVOID: { bg: "#fde8e8", color: "#9a2020", textColor: "#b83030" },
 };
 
+function badgePill(decision: Decision): CSSProperties {
+  const s = DECISION_STYLE[decision];
+  return { background: s.bg, color: s.color, borderRadius: 100, fontSize: 11, fontWeight: 700, padding: "3px 12px", display: "inline-block" };
+}
+
 const REGIME_COLOR: Record<string, string> = {
-  TRENDING: "text-emerald-400",
-  MIXED:    "text-slate-400",
-  RISK_OFF: "text-red-400",
+  TRENDING: "#2d7a52",
+  MIXED:    "#888888",
+  RISK_OFF: "#b86e10",
 };
 
 const RISK_COLOR: Record<string, string> = {
-  LOW:    "text-emerald-400",
-  MEDIUM: "text-amber-400",
-  HIGH:   "text-red-400",
+  LOW:    "#2d7a52",
+  MEDIUM: "#b86e10",
+  HIGH:   "#b83030",
 };
 
 const TIME_RANGES = [
@@ -44,9 +49,9 @@ const TIME_RANGES = [
 ];
 
 const MA_LINES = [
-  { key: "ma30",  period: 30,  color: "#f59e0b", label: "MA30"  },
-  { key: "ma50",  period: 50,  color: "#3b82f6", label: "MA50"  },
-  { key: "ma120", period: 120, color: "#a855f7", label: "MA120" },
+  { key: "ma30",  period: 30,  color: "#f59e0b", rgba: "rgba(245,158,11,0.12)",  label: "MA30"  },
+  { key: "ma50",  period: 50,  color: "#3a7bd5", rgba: "rgba(58,123,213,0.12)",  label: "MA50"  },
+  { key: "ma120", period: 120, color: "#8b5cf6", rgba: "rgba(139,92,246,0.12)",  label: "MA120" },
 ] as const;
 
 type PriceRow = { date: string; open: number; high: number; low: number; close: number; volume: number };
@@ -54,13 +59,13 @@ type PriceRow = { date: string; open: number; high: number; low: number; close: 
 function ScoreBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
   const pct = Math.min(Math.abs(value) / max * 100, 100);
   return (
-    <div className="space-y-1">
-      <div className="flex justify-between text-xs">
-        <span className="text-slate-500">{label}</span>
-        <span className="font-mono text-slate-300">{value.toFixed(1)}</span>
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+        <span style={{ fontSize: 12, color: "#444" }}>{label}</span>
+        <span style={{ fontSize: 12, color: "#1a1a1a", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{value.toFixed(1)}</span>
       </div>
-      <div className="h-1.5 w-full rounded-full bg-slate-800">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+      <div style={{ height: 6, background: "rgba(0,0,0,0.07)", borderRadius: 3 }}>
+        <div style={{ height: "100%", borderRadius: 3, background: color, width: `${pct}%` }} />
       </div>
     </div>
   );
@@ -69,10 +74,10 @@ function ScoreBar({ label, value, max, color }: { label: string; value: number; 
 const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: { dataKey: string; value: number; color: string }[]; label?: string }) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs">
-      <p className="text-slate-400 mb-1">{label}</p>
+    <div style={{ background: "#fff", border: "1px solid rgba(0,0,0,0.09)", borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "#1a1a1a", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>
+      <p style={{ color: "#888", margin: "0 0 4px" }}>{label}</p>
       {payload.map((p) => (
-        <p key={p.dataKey} className="font-mono" style={{ color: p.color }}>
+        <p key={p.dataKey} style={{ fontVariantNumeric: "tabular-nums", color: p.color, margin: "2px 0" }}>
           {p.dataKey === "close" ? "" : p.dataKey.toUpperCase() + " "}${p.value?.toFixed(2) ?? "—"}
         </p>
       ))}
@@ -91,8 +96,8 @@ interface TickerDetails {
 
 function fmtCap(v: number) {
   if (v >= 1e12) return `$${(v / 1e12).toFixed(1)}T`;
-  if (v >= 1e9) return `$${(v / 1e9).toFixed(1)}B`;
-  if (v >= 1e6) return `$${(v / 1e6).toFixed(0)}M`;
+  if (v >= 1e9)  return `$${(v / 1e9).toFixed(1)}B`;
+  if (v >= 1e6)  return `$${(v / 1e6).toFixed(0)}M`;
   return `$${v.toLocaleString()}`;
 }
 
@@ -118,15 +123,15 @@ function CompanyInfoCard({ ticker }: { ticker: string }) {
   if (!info) return null;
 
   const fields: { label: string; value: string | ReactNode }[] = [];
-  if (info.sic_description) fields.push({ label: "Industry", value: info.sic_description });
-  if (info.market_cap) fields.push({ label: "Market Cap", value: fmtCap(info.market_cap) });
-  if (info.total_employees) fields.push({ label: "Employees", value: fmtEmployees(info.total_employees) });
+  if (info.sic_description) fields.push({ label: "Industry",   value: info.sic_description });
+  if (info.market_cap)      fields.push({ label: "Market Cap", value: fmtCap(info.market_cap) });
+  if (info.total_employees) fields.push({ label: "Employees",  value: fmtEmployees(info.total_employees) });
   if (info.homepage_url) {
     const display = info.homepage_url.replace(/^https?:\/\//, "").replace(/\/$/, "");
     fields.push({
       label: "Website",
       value: (
-        <a href={info.homepage_url} target="_blank" rel="noopener noreferrer" className="text-sky-400 hover:text-sky-300 transition-colors">
+        <a href={info.homepage_url} target="_blank" rel="noopener noreferrer" style={{ color: "#2d7a52", textDecoration: "none" }}>
           {display}
         </a>
       ),
@@ -134,16 +139,16 @@ function CompanyInfoCard({ ticker }: { ticker: string }) {
   }
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900 p-4 mb-6">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          {info.name && <h2 className="text-base font-semibold text-slate-200 truncate">{info.name}</h2>}
+    <div style={{ background: "#fff", border: "1px solid rgba(0,0,0,0.09)", borderRadius: 14, padding: "20px 24px", marginBottom: 24 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 16 }}>
+        <div style={{ minWidth: 0 }}>
+          {info.name && <h2 style={{ fontSize: 15, fontWeight: 700, color: "#1a1a1a", margin: "0 0 8px" }}>{info.name}</h2>}
           {fields.length > 0 && (
-            <div className="flex flex-wrap gap-x-5 gap-y-1 mt-2">
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 20px" }}>
               {fields.map(({ label, value }) => (
-                <div key={label} className="flex items-center gap-1.5 text-sm">
-                  <span className="text-slate-500">{label}</span>
-                  <span className="text-slate-300">{value}</span>
+                <div key={label} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+                  <span style={{ color: "#888" }}>{label}</span>
+                  <span style={{ color: "#1a1a1a", fontWeight: 600 }}>{value}</span>
                 </div>
               ))}
             </div>
@@ -151,14 +156,14 @@ function CompanyInfoCard({ ticker }: { ticker: string }) {
         </div>
       </div>
       {info.description && (
-        <div className="mt-3">
-          <p className={`text-sm leading-relaxed text-slate-400 ${expanded ? "" : "line-clamp-3"}`}>
+        <div style={{ marginTop: 12 }}>
+          <p className={expanded ? undefined : "line-clamp-3"} style={{ fontSize: 13, color: "#444", lineHeight: 1.6, margin: 0 }}>
             {info.description}
           </p>
           {info.description.length > 200 && (
             <button
               onClick={() => setExpanded(!expanded)}
-              className="mt-1 text-[10px] text-slate-500 hover:text-slate-300 transition-colors"
+              style={{ marginTop: 4, fontSize: 12, color: "#2d7a52", background: "none", border: "none", cursor: "pointer", padding: 0 }}
             >
               {expanded ? "Show less" : "Show more"}
             </button>
@@ -192,22 +197,21 @@ export function AssetDetailView({
   }, [prices, range]);
 
   const firstClose = filteredPrices[0]?.close ?? 0;
-  const lastClose = filteredPrices[filteredPrices.length - 1]?.close ?? 0;
-  const pctChange = firstClose > 0 ? ((lastClose - firstClose) / firstClose) * 100 : 0;
-  const isUp = pctChange >= 0;
-  const chartColor = isUp ? "#00c87a" : "#ff4d4d";
+  const lastClose  = filteredPrices[filteredPrices.length - 1]?.close ?? 0;
+  const pctChange  = firstClose > 0 ? ((lastClose - firstClose) / firstClose) * 100 : 0;
+  const isUp       = pctChange >= 0;
+  const chartColor     = isUp ? "#2d7a52" : "#b83030";
+  const chartFillColor = isUp ? "#e4f2eb"  : "#fde8e8";
 
   const chartData = useMemo(() => {
-    // Use full prices array for MA calculation, then slice to filtered range
     const allCloses = prices.map((p) => p.close);
     const filteredStartIdx = filteredPrices.length > 0
       ? prices.findIndex((p) => p.date === filteredPrices[0].date)
       : 0;
-
-    const result = filteredPrices.map((p, i) => {
+    return filteredPrices.map((p, i) => {
       const globalIdx = filteredStartIdx + i;
       const row: Record<string, number | null | string> = {
-        date: p.date.slice(0, 10),
+        date:  p.date.slice(0, 10),
         close: parseFloat(p.close.toFixed(2)),
       };
       for (const { key, period } of MA_LINES) {
@@ -220,47 +224,37 @@ export function AssetDetailView({
       }
       return row;
     });
-    return result;
   }, [prices, filteredPrices]);
 
-  // Forecast fan chart
   const { combinedData, lastHistDate } = useMemo(() => {
     if (!chartData.length || !lastClose) return { combinedData: chartData, lastHistDate: "" };
 
     const driftDaily = ranking.momentum_score / 10000;
-    const dailyVol = Math.abs(ranking.risk_penalty) / 100 / Math.sqrt(252);
-    const z = 1.645; // 90% CI
+    const dailyVol   = Math.abs(ranking.risk_penalty) / 100 / Math.sqrt(252);
+    const z          = 1.645;
 
-    const lastDate = new Date(filteredPrices[filteredPrices.length - 1]?.date ?? Date.now());
+    const lastDate    = new Date(filteredPrices[filteredPrices.length - 1]?.date ?? Date.now());
     const lastDateStr = chartData[chartData.length - 1]?.date as string;
 
-    // Generate forecast points at day 10, 20, 30, 45, 60, 75, 90
-    const forecastDays = [10, 20, 30, 45, 60, 75, 90];
-    const forecastPoints = forecastDays.map((t) => {
+    const forecastPoints = [10, 20, 30, 45, 60, 75, 90].map((t) => {
       const center = lastClose * (1 + driftDaily * t);
       const spread = dailyVol * Math.sqrt(t) * z;
       const futureDate = new Date(lastDate);
       futureDate.setDate(futureDate.getDate() + t);
-      const dateStr = futureDate.toISOString().split("T")[0].slice(0, 10);
       return {
-        date: dateStr,
-        close: null as number | null,
-        fanUpper: parseFloat((center * (1 + spread)).toFixed(2)),
-        fanLower: parseFloat((center * (1 - spread)).toFixed(2)),
+        date:      futureDate.toISOString().split("T")[0].slice(0, 10),
+        close:     null as number | null,
+        fanUpper:  parseFloat((center * (1 + spread)).toFixed(2)),
+        fanLower:  parseFloat((center * (1 - spread)).toFixed(2)),
         fanCenter: parseFloat(center.toFixed(2)),
         ma30: null, ma50: null, ma120: null,
       };
     });
 
-    // Bridge point: last historical point starts the fan
     const bridge = {
       ...chartData[chartData.length - 1],
-      fanUpper: lastClose,
-      fanLower: lastClose,
-      fanCenter: lastClose,
+      fanUpper: lastClose, fanLower: lastClose, fanCenter: lastClose,
     };
-
-    // Historical points get null fan values
     const histWithFan = chartData.slice(0, -1).map((d) => ({
       ...d,
       fanUpper: null as number | null,
@@ -268,50 +262,47 @@ export function AssetDetailView({
       fanCenter: null as number | null,
     }));
 
-    return {
-      combinedData: [...histWithFan, bridge, ...forecastPoints],
-      lastHistDate: lastDateStr,
-    };
+    return { combinedData: [...histWithFan, bridge, ...forecastPoints], lastHistDate: lastDateStr };
   }, [chartData, lastClose, ranking, filteredPrices]);
 
-  const fanColor = ranking.decision === "BUY" ? "#00c87a"
-    : ranking.decision === "AVOID" ? "#ff4d4d"
-    : "#f59e0b";
+  const fanColor = ranking.decision === "BUY" ? "#2d7a52"
+    : ranking.decision === "AVOID" ? "#b83030"
+    : "#b86e10";
+
+  const decStyle = DECISION_STYLE[ranking.decision];
 
   return (
-    <div style={{ background: "#0a0e1a", minHeight: "100vh", color: "#e2e8f0" }}>
-      <div className="mx-auto max-w-7xl px-4 py-8">
+    <div style={{ background: "#f5f4f0", minHeight: "100vh", fontFamily: "Nunito, sans-serif" }}>
+      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 40px" }}>
 
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-6">
-          <Link href="/" className="text-slate-500 hover:text-slate-300 text-sm transition-colors">
-            ← Market Overview
-          </Link>
-        </div>
+        {/* Back link */}
+        <Link href="/dashboard" style={{ fontSize: 13, color: "#444", textDecoration: "none", display: "block", marginBottom: 16 }}>
+          ← Market Overview
+        </Link>
 
-        <div className="flex flex-wrap items-start justify-between gap-4 mb-8">
-          <div className="flex items-center gap-4">
-            {/* Stock selector */}
+        {/* Asset header */}
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             <select
               value={ranking.ticker}
               onChange={(e) => router.push(`/asset/${e.target.value}`)}
-              className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-slate-500"
+              style={{ background: "#fff", border: "1px solid rgba(0,0,0,0.12)", borderRadius: 8, color: "#1a1a1a", fontSize: 14, fontWeight: 600, padding: "8px 12px", cursor: "pointer" }}
             >
-              {allTickers.map((t) => (
+              {[...new Set(allTickers)].map((t) => (
                 <option key={t} value={t}>{t}</option>
               ))}
             </select>
             <div>
-              <h1 className="text-3xl font-bold text-slate-100">{ranking.ticker}</h1>
-              <p className="text-sm text-slate-500 mt-0.5">{ranking.asset_type.toUpperCase()} · Rank #{ranking.rank_overall}</p>
+              <h1 style={{ fontSize: 32, fontWeight: 700, color: "#1a1a1a", margin: 0 }}>{ranking.ticker}</h1>
+              <p style={{ fontSize: 12, color: "#888", margin: "4px 0 0" }}>
+                {ranking.asset_type.toUpperCase()} · Rank #{ranking.rank_overall}
+              </p>
             </div>
-            <span className={`px-3 py-1 rounded-lg text-sm font-bold ${D_COLOR[ranking.decision].badge}`}>
-              {ranking.decision}
-            </span>
+            <span style={badgePill(ranking.decision)}>{ranking.decision}</span>
           </div>
-          <div className="text-right">
-            <p className="text-3xl font-bold tabular-nums text-slate-100">${lastClose.toFixed(2)}</p>
-            <p className={`text-sm font-mono mt-0.5 ${isUp ? "text-emerald-400" : "text-red-400"}`}>
+          <div style={{ textAlign: "right" }}>
+            <p style={{ fontSize: 32, fontWeight: 700, color: "#1a1a1a", margin: 0, fontVariantNumeric: "tabular-nums" }}>${lastClose.toFixed(2)}</p>
+            <p style={{ fontSize: 13, fontVariantNumeric: "tabular-nums", margin: "4px 0 0", color: isUp ? "#2d7a52" : "#b83030" }}>
               {isUp ? "▲" : "▼"} {Math.abs(pctChange).toFixed(2)}% ({range})
             </p>
           </div>
@@ -319,44 +310,56 @@ export function AssetDetailView({
 
         <CompanyInfoCard ticker={ranking.ticker} />
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {/* Left: chart */}
-          <div className="lg:col-span-2 space-y-6">
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24 }}>
+          {/* Left: chart + OHLCV */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
 
             {/* Chart card */}
-            <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-semibold text-slate-200">Price History</h2>
-                <div className="flex items-center gap-3">
+            <div style={{ background: "#fff", border: "1px solid rgba(0,0,0,0.09)", borderRadius: 14, padding: "20px 24px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1a1a1a", margin: 0 }}>Price History</h2>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   {/* MA toggles */}
-                  <div className="flex gap-1">
-                    {MA_LINES.map(({ key, label, color }) => (
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {MA_LINES.map(({ key, label, color, rgba }) => (
                       <button
                         key={key}
                         onClick={() => setMaVisible((prev) => ({ ...prev, [key]: !prev[key] }))}
-                        className={`px-2 py-1 rounded text-[10px] font-bold transition-all border ${
-                          maVisible[key]
-                            ? "border-current opacity-100"
-                            : "border-slate-700 opacity-40"
-                        }`}
-                        style={{ color }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 5,
+                          background: maVisible[key] ? rgba : "transparent",
+                          color:      maVisible[key] ? color : "#888",
+                          border:     maVisible[key] ? `1.5px solid ${color}` : "1px solid rgba(0,0,0,0.12)",
+                          borderRadius: 100,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          padding: "3px 10px",
+                          cursor: "pointer",
+                        }}
                       >
+                        <span style={{ width: 16, height: 3, borderRadius: 2, background: color, display: "inline-block", opacity: maVisible[key] ? 1 : 0.4 }} />
                         {label}
                       </button>
                     ))}
                   </div>
-                  <div className="w-px h-4 bg-slate-700" />
+                  <div style={{ width: 1, height: 16, background: "rgba(0,0,0,0.1)" }} />
                   {/* Time range */}
-                  <div className="flex gap-1">
+                  <div style={{ display: "flex", gap: 2 }}>
                     {TIME_RANGES.map((r) => (
                       <button
                         key={r.label}
                         onClick={() => setRange(r.label)}
-                        className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
-                          range === r.label
-                            ? "bg-slate-700 text-slate-100"
-                            : "text-slate-500 hover:text-slate-300"
-                        }`}
+                        style={{
+                          background: range === r.label ? "#1a1a1a" : "transparent",
+                          color:      range === r.label ? "#fff"    : "#888",
+                          borderRadius: 100,
+                          fontSize: 12,
+                          padding: "3px 10px",
+                          border: "none",
+                          cursor: "pointer",
+                        }}
                       >
                         {r.label}
                       </button>
@@ -368,25 +371,25 @@ export function AssetDetailView({
                 <AreaChart data={combinedData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={chartColor} stopOpacity={0.3} />
-                      <stop offset="95%" stopColor={chartColor} stopOpacity={0} />
+                      <stop offset="5%"  stopColor={chartFillColor} stopOpacity={1} />
+                      <stop offset="95%" stopColor={chartFillColor} stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="fanGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={fanColor} stopOpacity={0.15} />
-                      <stop offset="100%" stopColor={fanColor} stopOpacity={0.03} />
+                      <stop offset="0%"   stopColor={fanColor} stopOpacity={0.1} />
+                      <stop offset="100%" stopColor={fanColor} stopOpacity={0.02} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
                   <XAxis
                     dataKey="date"
-                    tick={{ fill: "#94a3b8", fontSize: 12 }}
+                    tick={{ fill: "#aaa", fontSize: 12 }}
                     tickLine={false}
                     axisLine={false}
                     interval="preserveStartEnd"
                     tickFormatter={(v) => v.slice(5).replace("-", "/")}
                   />
                   <YAxis
-                    tick={{ fill: "#94a3b8", fontSize: 12 }}
+                    tick={{ fill: "#aaa", fontSize: 12 }}
                     tickLine={false}
                     axisLine={false}
                     tickFormatter={(v) => `$${v}`}
@@ -416,43 +419,15 @@ export function AssetDetailView({
                       />
                     ) : null
                   )}
-                  {/* Forecast fan */}
-                  <Area
-                    type="monotone"
-                    dataKey="fanUpper"
-                    stroke="none"
-                    fill="url(#fanGrad)"
-                    dot={false}
-                    connectNulls={false}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="fanLower"
-                    stroke="none"
-                    fill="#0a0e1a"
-                    dot={false}
-                    connectNulls={false}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="fanCenter"
-                    stroke={fanColor}
-                    strokeWidth={1}
-                    strokeDasharray="6 4"
-                    dot={false}
-                    connectNulls={false}
-                  />
+                  <Area type="monotone" dataKey="fanUpper" stroke="none" fill="url(#fanGrad)" dot={false} connectNulls={false} />
+                  <Area type="monotone" dataKey="fanLower" stroke="none" fill="#f5f4f0"       dot={false} connectNulls={false} />
+                  <Line  type="monotone" dataKey="fanCenter" stroke={fanColor} strokeWidth={1} strokeDasharray="6 4" dot={false} connectNulls={false} />
                   {lastHistDate && (
-                    <ReferenceLine
-                      x={lastHistDate}
-                      stroke="#475569"
-                      strokeDasharray="3 3"
-                      strokeWidth={1}
-                    />
+                    <ReferenceLine x={lastHistDate} stroke="rgba(0,0,0,0.15)" strokeDasharray="3 3" strokeWidth={1} />
                   )}
                 </AreaChart>
               </ResponsiveContainer>
-              <p className="mt-2 text-[10px] text-slate-600 text-right">
+              <p style={{ marginTop: 8, fontSize: 11, color: "#aaa", textAlign: "right" }}>
                 Based on historical volatility. Not a price target.
               </p>
             </div>
@@ -460,19 +435,19 @@ export function AssetDetailView({
             {/* OHLCV summary */}
             {filteredPrices.length > 0 && (() => {
               const last = filteredPrices[filteredPrices.length - 1];
-              const hi = Math.max(...filteredPrices.map(p => p.high));
-              const lo = Math.min(...filteredPrices.map(p => p.low));
+              const hi   = Math.max(...filteredPrices.map(p => p.high));
+              const lo   = Math.min(...filteredPrices.map(p => p.low));
               return (
-                <div className="grid grid-cols-4 gap-3">
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
                   {[
-                    { label: "Open",     val: `$${last.open.toFixed(2)}`  },
-                    { label: "High",     val: `$${hi.toFixed(2)}`         },
-                    { label: "Low",      val: `$${lo.toFixed(2)}`         },
-                    { label: "Volume",   val: (last.volume / 1e6).toFixed(1) + "M" },
+                    { label: "Open",   val: `$${last.open.toFixed(2)}`          },
+                    { label: "High",   val: `$${hi.toFixed(2)}`                 },
+                    { label: "Low",    val: `$${lo.toFixed(2)}`                 },
+                    { label: "Volume", val: (last.volume / 1e6).toFixed(1) + "M" },
                   ].map(({ label, val }) => (
-                    <div key={label} className="rounded-lg border border-slate-800 bg-slate-900 p-3">
-                      <p className="text-sm text-slate-400">{label}</p>
-                      <p className="mt-1 font-mono text-base font-semibold text-slate-200">{val}</p>
+                    <div key={label} style={{ background: "#fafaf8", border: "1px solid rgba(0,0,0,0.07)", borderRadius: 10, padding: "12px 16px" }}>
+                      <p style={{ fontSize: 11, color: "#888", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 4px" }}>{label}</p>
+                      <p style={{ fontSize: 18, fontWeight: 700, color: "#1a1a1a", margin: 0, fontVariantNumeric: "tabular-nums" }}>{val}</p>
                     </div>
                   ))}
                 </div>
@@ -480,64 +455,52 @@ export function AssetDetailView({
             })()}
           </div>
 
-          {/* Right: factor scores */}
-          <div className="space-y-4">
-            {/* Composite score */}
-            <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-              <p className="text-xs font-semibold uppercase tracking-widest text-slate-300 mb-3">Factor Score</p>
-              <div className="flex items-end gap-3 mb-4">
-                <p className="text-4xl font-bold tabular-nums text-slate-100">{ranking.composite_score.toFixed(1)}</p>
-                <p className="text-slate-500 text-sm mb-1">/ 70</p>
+          {/* Right: factor panels */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+            {/* Factor Score */}
+            <div style={{ background: "#fff", border: "1px solid rgba(0,0,0,0.09)", borderRadius: 14, padding: "20px 24px" }}>
+              <p style={{ fontSize: 11, color: "#888", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 12px" }}>Factor Score</p>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 8, marginBottom: 16 }}>
+                <span style={{ fontSize: 32, fontWeight: 700, color: "#1a1a1a", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{ranking.composite_score.toFixed(1)}</span>
+                <span style={{ fontSize: 16, color: "#888", marginBottom: 2 }}>/ 70</span>
               </div>
-              <div className="space-y-3">
-                <ScoreBar label="Trend"    value={ranking.trend_score}     max={30} color="bg-sky-500"     />
-                <ScoreBar label="Momentum" value={ranking.momentum_score}  max={40} color="bg-violet-500"  />
-                <ScoreBar label="Risk"     value={Math.abs(ranking.risk_penalty)} max={10} color="bg-red-500" />
-              </div>
+              <ScoreBar label="Trend"    value={ranking.trend_score}            max={30} color="#3a7bd5" />
+              <ScoreBar label="Momentum" value={ranking.momentum_score}         max={40} color="#b86e10" />
+              <ScoreBar label="Risk"     value={Math.abs(ranking.risk_penalty)} max={10} color="#b83030" />
             </div>
 
-            {/* Signal details */}
-            <div className="rounded-xl border border-slate-800 bg-slate-900 p-4 space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-widest text-slate-300">Signal Details</p>
+            {/* Signal Details */}
+            <div style={{ background: "#fff", border: "1px solid rgba(0,0,0,0.09)", borderRadius: 14, padding: "20px 24px" }}>
+              <p style={{ fontSize: 11, color: "#888", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 12px" }}>Signal Details</p>
               {[
-                { label: "Confidence",  val: `${ranking.confidence}%`,  cls: "text-slate-200" },
-                { label: "Regime",      val: ranking.regime,            cls: REGIME_COLOR[ranking.regime] ?? "text-slate-400" },
-                { label: "Risk Level",  val: ranking.risk_level,        cls: RISK_COLOR[ranking.risk_level] ?? "text-slate-400" },
-                { label: "Horizon",     val: `${ranking.horizon_days}d`, cls: "text-slate-200" },
-                { label: "Snapshot",    val: ranking.snapshot_date,     cls: "text-slate-400" },
-              ].map(({ label, val, cls }) => (
-                <div key={label} className="flex justify-between items-center">
-                  <span className="text-sm text-slate-400">{label}</span>
-                  <span className={`text-sm font-semibold ${cls}`}>{val}</span>
+                { label: "Confidence", val: `${ranking.confidence}%`,   color: "#1a1a1a" },
+                { label: "Regime",     val: ranking.regime,              color: REGIME_COLOR[ranking.regime] ?? "#444" },
+                { label: "Risk Level", val: ranking.risk_level,          color: RISK_COLOR[ranking.risk_level] ?? "#444" },
+                { label: "Horizon",    val: `${ranking.horizon_days}d`,  color: "#1a1a1a" },
+                { label: "Snapshot",   val: ranking.snapshot_date,       color: "#444" },
+              ].map(({ label, val, color }) => (
+                <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <span style={{ fontSize: 13, color: "#444" }}>{label}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color }}>{val}</span>
                 </div>
               ))}
-            </div>
-
-            {/* Confidence bar */}
-            <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-              <p className="text-xs font-semibold uppercase tracking-widest text-slate-300 mb-3">Signal Confidence</p>
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-2 rounded-full bg-slate-800">
-                  <div
-                    className={`h-full rounded-full ${D_COLOR[ranking.decision].badge.includes("emerald") ? "bg-emerald-500" : D_COLOR[ranking.decision].badge.includes("sky") ? "bg-sky-500" : D_COLOR[ranking.decision].badge.includes("amber") ? "bg-amber-500" : "bg-red-500"}`}
-                    style={{ width: `${ranking.confidence}%` }}
-                  />
-                </div>
-                <span className="text-sm font-bold tabular-nums text-slate-200">{ranking.confidence}%</span>
+              <div style={{ marginTop: 12, height: 6, background: "#e4edf9", borderRadius: 3 }}>
+                <div style={{ height: "100%", borderRadius: 3, background: "#3a7bd5", width: `${ranking.confidence}%` }} />
               </div>
             </div>
 
             {/* Why DECISION? */}
-            <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-              <p className={`text-sm font-semibold uppercase tracking-widest mb-3 ${D_COLOR[ranking.decision].text}`}>
+            <div style={{ background: "#fff", border: "1px solid rgba(0,0,0,0.09)", borderRadius: 14, padding: "20px 24px" }}>
+              <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: decStyle.textColor, margin: "0 0 12px" }}>
                 Why {ranking.decision}?
               </p>
-              <ul className="space-y-2">
+              <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
                 {(() => {
                   const reasons: { text: string; weight: number }[] = [];
                   const rp = Math.abs(ranking.risk_penalty);
-                  if (ranking.trend_score > 25)    reasons.push({ text: "Trend is strong — price is trading above key moving averages", weight: ranking.trend_score });
-                  if (ranking.trend_score < 15)    reasons.push({ text: "Trend is weak — price is below key moving averages", weight: 30 - ranking.trend_score });
+                  if (ranking.trend_score > 25)     reasons.push({ text: "Trend is strong — price is trading above key moving averages", weight: ranking.trend_score });
+                  if (ranking.trend_score < 15)     reasons.push({ text: "Trend is weak — price is below key moving averages", weight: 30 - ranking.trend_score });
                   if (ranking.momentum_score > 30)  reasons.push({ text: "Momentum is accelerating across multiple timeframes", weight: ranking.momentum_score });
                   if (ranking.momentum_score < 15)  reasons.push({ text: "Momentum is fading — recent returns are underperforming", weight: 40 - ranking.momentum_score });
                   if (rp < 5)                       reasons.push({ text: "Volatility is contained — drawdown risk is low", weight: 10 - rp });
@@ -550,8 +513,8 @@ export function AssetDetailView({
                     .sort((a, b) => b.weight - a.weight)
                     .slice(0, 3)
                     .map(({ text }) => (
-                      <li key={text} className="flex items-start gap-2 text-sm leading-relaxed text-slate-400">
-                        <span className="mt-0.5 text-slate-600">•</span>
+                      <li key={text} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13, color: "#444", lineHeight: 1.6, marginBottom: 8 }}>
+                        <span style={{ color: "#ccc", marginTop: 2 }}>•</span>
                         {text}
                       </li>
                     ));
