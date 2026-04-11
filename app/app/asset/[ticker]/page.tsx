@@ -14,6 +14,8 @@ async function getAssetData(ticker: string) {
       .from("rankings")
       .select("*")
       .eq("ticker", ticker)
+      .order("snapshot_date", { ascending: false })
+      .limit(1)
       .single(),
     supabase
       .from("stock_prices")
