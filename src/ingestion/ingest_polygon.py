@@ -180,12 +180,12 @@ def main() -> None:
     if args.date:
         target_date = date.fromisoformat(args.date)
     else:
-        yesterday = date.today() - timedelta(days=1)
-        if max_existing and max_existing >= yesterday:
-            print(f"\nAlready up to date (max date {max_existing} >= yesterday {yesterday}).")
+        today = date.today()
+        if max_existing and max_existing >= today:
+            print(f"\nAlready up to date (max date {max_existing} >= today {today}).")
             return
-        # Walk backwards from yesterday to find the next date to ingest
-        target_date = yesterday
+        # Walk backwards from today to find the next date to ingest
+        target_date = today
 
     if max_existing and target_date <= max_existing:
         print(f"\nAlready up to date (max date {max_existing} >= target {target_date}).")
@@ -200,7 +200,7 @@ def main() -> None:
         df = fetch_grouped_daily(target_date, tickers=tickers)
     except RuntimeError as e:
         if "403" in str(e) or "NOT_AUTHORIZED" in str(e):
-            print(f"  API rejected {target_date} (free-tier cannot fetch today before EOD).")
+            print(f"  API rejected {target_date} (free-tier may not have data for this date yet).")
             df = pd.DataFrame()
         else:
             raise
@@ -208,7 +208,7 @@ def main() -> None:
     if df.empty:
         # Market may have been closed — walk back up to 5 days
         if not args.date:
-            for offset in range(2, 6):
+            for offset in range(1, 6):
                 try_date = date.today() - timedelta(days=offset)
                 if max_existing and try_date <= max_existing:
                     break
